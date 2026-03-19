@@ -27,6 +27,17 @@ export async function getFileContent(owner: string, repo: string, path: string):
   }
 }
 
+export async function getFileSha(owner: string, repo: string, path: string): Promise<string | null> {
+  try {
+    const { data } = await octokit.rest.repos.getContent({ owner, repo, path });
+    if (Array.isArray(data)) return null;
+    if (data.type !== "file" || !("sha" in data)) return null;
+    return data.sha;
+  } catch {
+    return null;
+  }
+}
+
 export async function putFile(owner: string, repo: string, path: string, content: string, sha: string, message: string): Promise<boolean> {
   try {
     await octokit.rest.repos.createOrUpdateFileContents({
@@ -36,6 +47,30 @@ export async function putFile(owner: string, repo: string, path: string, content
       content: Buffer.from(content, "utf8").toString("base64"),
       sha,
       message,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Create or update a binary file (e.g. image). Pass sha only when updating. */
+export async function putFileBinary(
+  owner: string,
+  repo: string,
+  path: string,
+  contentBase64: string,
+  message: string,
+  sha?: string
+): Promise<boolean> {
+  try {
+    await octokit.rest.repos.createOrUpdateFileContents({
+      owner,
+      repo,
+      path,
+      content: contentBase64,
+      message,
+      ...(sha ? { sha } : {}),
     });
     return true;
   } catch {
