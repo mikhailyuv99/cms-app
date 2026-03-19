@@ -45,6 +45,10 @@ Ouvrir **http://localhost:3000**. Le client entre le **mot de passe de son proje
 - **CMS_SESSION_SECRET** : chaîne aléatoire pour signer les cookies de session (en production, ne pas utiliser la valeur par défaut).
 - **Netlify** : chaque site client est déployé via Netlify à partir de son dépôt (déploiement à chaque push).
 
+## Règle d’indépendance (important)
+
+**Le CMS est indépendant des sites clients.** Lors de toute évolution du CMS (nouvelles fonctionnalités, correctifs, refacto), il ne doit y avoir **aucune modification requise** sur les sites clients (dépôts des clients, mockup, etc.). Le CMS lit et écrit uniquement `content.json` dans le repo du client ; c’est au site client de décider comment il affiche ces données. Les mises à jour du CMS ne doivent jamais imposer de changer le code des sites clients.
+
 ## Structure du contenu (adaptable)
 
-Le fichier `content.json` à la racine du dépôt peut contenir **tout ou partie** des sections : hero, about, services, contact. Le CMS détecte les sections présentes et n’édite que celles-là ; l’ordre d’affichage est donné par `sectionOrder` (ou ordre par défaut). Voir `mockup-site/content.json` et **`PROMPT-CMS-COMPATIBLE.md`** (à la racine du repo) pour le prompt à donner à une IA qui développe un site client compatible.
+Le fichier `content.json` à la racine du dépôt peut contenir **tout ou partie** des sections : hero, about, services, contact. Le CMS détecte les sections présentes et n’édite que celles-là ; l’ordre d’affichage est donné par `sectionOrder` (ou ordre par défaut). Voir **`PROMPT-CMS-COMPATIBLE.md`** (à la racine du repo) pour le prompt à donner à une IA qui développe un site client compatible.

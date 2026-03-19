@@ -78,11 +78,11 @@ function HeroVideo({
 
 interface SitePreviewProps {
   content: ContentData;
-  onHero: (field: keyof ContentData["hero"], value: string) => void;
-  onAbout: (field: keyof ContentData["about"], value: string) => void;
+  onHero: (field: keyof NonNullable<ContentData["hero"]>, value: string) => void;
+  onAbout: (field: keyof NonNullable<ContentData["about"]>, value: string) => void;
   onService: (index: number, field: "title" | "description", value: string) => void;
   onServicesTitle: (value: string) => void;
-  onContact: (field: keyof ContentData["contact"], value: string) => void;
+  onContact: (field: keyof NonNullable<ContentData["contact"]>, value: string) => void;
   onSectionReorder: (fromIndex: number, toIndex: number) => void;
   onServiceCardReorder: (fromIndex: number, toIndex: number) => void;
   imageCacheBust?: number;

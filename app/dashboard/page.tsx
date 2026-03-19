@@ -144,10 +144,16 @@ export default function DashboardPage() {
   }
 
   function updateHero(field: keyof NonNullable<ContentData["hero"]>, value: string) {
-    applyPageUpdate((c) => ({ ...c, hero: { ...c.hero, [field]: value } }));
+    applyPageUpdate((c) => ({
+      ...c,
+      hero: { ...c.hero, [field]: value } as NonNullable<ContentData["hero"]>,
+    }));
   }
   function updateAbout(field: keyof NonNullable<ContentData["about"]>, value: string) {
-    applyPageUpdate((c) => ({ ...c, about: { ...c.about, [field]: value } }));
+    applyPageUpdate((c) => ({
+      ...c,
+      about: { ...c.about, [field]: value } as NonNullable<ContentData["about"]>,
+    }));
   }
   function updateService(index: number, field: "title" | "description", value: string) {
     applyPageUpdate((c) => {
@@ -158,7 +164,10 @@ export default function DashboardPage() {
     });
   }
   function updateContact(field: keyof NonNullable<ContentData["contact"]>, value: string) {
-    applyPageUpdate((c) => ({ ...c, contact: { ...c.contact, [field]: value } }));
+    applyPageUpdate((c) => ({
+      ...c,
+      contact: { ...c.contact, [field]: value } as NonNullable<ContentData["contact"]>,
+    }));
   }
 
   function reorderSection(fromIndex: number, toIndex: number) {
@@ -226,7 +235,7 @@ export default function DashboardPage() {
             image: data.path,
             ...(data.pathWebp && { imageWebp: data.pathWebp }),
             ...(data.pathAvif && { imageAvif: data.pathAvif }),
-          },
+          } as NonNullable<ContentData["hero"]>,
         }));
       } else {
         applyPageUpdate((c) => ({
@@ -236,7 +245,7 @@ export default function DashboardPage() {
             image: data.path,
             ...(data.pathWebp && { imageWebp: data.pathWebp }),
             ...(data.pathAvif && { imageAvif: data.pathAvif }),
-          },
+          } as NonNullable<ContentData["about"]>,
         }));
       }
       setImageCacheBust(Date.now());
@@ -262,8 +271,8 @@ export default function DashboardPage() {
         setPublishMessage(data.error || "Échec de l'upload vidéo");
         return;
       }
-      if (key === "hero") applyPageUpdate((c) => ({ ...c, hero: { ...c.hero, video: data.path } }));
-      else applyPageUpdate((c) => ({ ...c, about: { ...c.about, video: data.path } }));
+      if (key === "hero") applyPageUpdate((c) => ({ ...c, hero: { ...c.hero, video: data.path } as NonNullable<ContentData["hero"]> }));
+      else applyPageUpdate((c) => ({ ...c, about: { ...c.about, video: data.path } as NonNullable<ContentData["about"]> }));
       setImageCacheBust(Date.now());
     } catch {
       setPublishMessage("Erreur lors de l'upload vidéo");
@@ -430,7 +439,7 @@ export default function DashboardPage() {
           onHero={updateHero}
           onAbout={updateAbout}
           onService={updateService}
-          onServicesTitle={(v) => applyPageUpdate((c) => ({ ...c, services: { ...c.services, title: v } }))}
+          onServicesTitle={(v) => applyPageUpdate((c) => ({ ...c, services: { ...(c.services ?? { title: "", items: [] }), title: v } }))}
           onContact={updateContact}
           onSectionReorder={reorderSection}
           onServiceCardReorder={reorderServiceCard}
