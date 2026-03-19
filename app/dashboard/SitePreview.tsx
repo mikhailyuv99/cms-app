@@ -167,6 +167,9 @@ export default function SitePreview({
               className="preview-hero__image"
               src={imageSrc(content.hero.image, siteUrl, imageCacheBust)}
               alt=""
+              loading="eager"
+              decoding="async"
+              fetchPriority="high"
             />
           </label>
         </div>
@@ -203,6 +206,8 @@ export default function SitePreview({
                 className="preview-about__image"
                 src={imageSrc(content.about.image, siteUrl, imageCacheBust)}
                 alt=""
+                loading="eager"
+                decoding="async"
               />
             </label>
           </div>

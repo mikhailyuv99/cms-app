@@ -27,7 +27,12 @@ export async function GET(request: NextRequest) {
     const buffer = Buffer.from(data.content, "base64");
     const contentType = path.endsWith(".png") ? "image/png" : path.endsWith(".gif") ? "image/gif" : path.endsWith(".webp") ? "image/webp" : "image/jpeg";
     return new NextResponse(buffer, {
-      headers: { "Content-Type": contentType, "Cache-Control": "private, max-age=60" },
+      headers: {
+        "Content-Type": contentType,
+        "Content-Length": String(buffer.length),
+        "Cache-Control": "private, max-age=60",
+        "Accept-Ranges": "bytes",
+      },
     });
   } catch {
     return new NextResponse("Not found", { status: 404 });

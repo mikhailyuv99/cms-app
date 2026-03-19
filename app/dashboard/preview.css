@@ -3,6 +3,7 @@
   width: 100%;
   min-width: 0;
   overflow-x: hidden;
+  overflow-y: visible; /* do not clip images/sections on mobile */
 }
 @supports (width: 100vw) {
   .preview-viewport {
@@ -35,6 +36,8 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  /* Ensure hero has a real height on mobile (flex/scroll contexts) */
+  flex-shrink: 0;
 }
 .preview-hero__bg {
   position: absolute;
@@ -49,6 +52,9 @@
   object-fit: cover;
   object-position: center;
   opacity: 0.85;
+  /* Prevent mobile from clipping or not painting the full image */
+  min-width: 100%;
+  min-height: 100%;
 }
 .preview-hero__content { position: relative; z-index: 1; text-align: center; padding: 2rem; max-width: 42rem; }
 .preview-hero__title {
@@ -64,6 +70,10 @@
 .preview-about { padding: 5rem 1.5rem; max-width: 72rem; margin: 0 auto; }
 .preview-about__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3rem; align-items: center; }
 @media (max-width: 768px) { .preview-about__grid { grid-template-columns: 1fr; } }
+.preview-about__media {
+  min-height: 0; /* allow grid cell to size to image on mobile */
+  overflow: visible;
+}
 .preview-about__image {
   width: 100%;
   height: auto;
@@ -72,6 +82,7 @@
   box-shadow: 0 20px 50px rgba(0,0,0,0.4);
   object-fit: cover;
   object-position: center;
+  vertical-align: middle; /* remove baseline gap on some mobile browsers */
 }
 .preview-about__title { font-family: 'Outfit', sans-serif; font-size: 1.75rem; font-weight: 600; color: #e8e8e8; margin: 0 0 1rem; }
 .preview-about__body { color: #a0a0a0; margin: 0; }
