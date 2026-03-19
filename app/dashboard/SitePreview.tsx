@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import type { ContentData, SectionId } from "@/lib/content-types";
 import { mergeTheme } from "@/lib/content-types";
 import "./preview.css";
@@ -17,6 +17,15 @@ const GRIP_ICON = (
     <circle cx="15" cy="18" r="1.5" />
   </svg>
 );
+
+function getIndexFromElement(el: Element | null, kind: "section" | "card"): number | null {
+  if (!el) return null;
+  const wrap = el.closest(kind === "section" ? ".preview-section-wrap" : ".preview-card-wrap");
+  if (!wrap) return null;
+  const attr = kind === "section" ? "data-section-index" : "data-card-index";
+  const v = wrap.getAttribute(attr);
+  return v !== null ? parseInt(v, 10) : null;
+}
 
 function imageSrc(url: string, siteUrl?: string, cacheBust?: number): string {
   if (!url) return "";
@@ -66,84 +75,83 @@ export default function SitePreview({
   const [draggingCard, setDraggingCard] = useState<number | null>(null);
   const scrollRAF = useRef<number | null>(null);
   const isDragging = draggingSection !== null || draggingCard !== null;
+  const pointerKindRef = useRef<"section" | "card" | null>(null);
+  const pointerFromRef = useRef<number>(0);
 
-  useEffect(() => {
-    if (!isDragging) return;
+  const doScroll = useCallback((clientY: number) => {
     const ZONE = 120;
-    const handleDragOver = (e: DragEvent) => {
-      e.preventDefault();
-      const y = e.clientY;
-      const h = typeof window !== "undefined" ? window.innerHeight : 800;
-      let dy = 0;
-      if (y < ZONE) {
-        const t = 1 - y / ZONE;
-        dy = -Math.round(8 + t * 16);
-      } else if (y > h - ZONE) {
-        const t = (y - (h - ZONE)) / ZONE;
-        dy = Math.round(8 + t * 16);
-      }
-      if (dy !== 0 && typeof window !== "undefined") {
-        if (scrollRAF.current != null) cancelAnimationFrame(scrollRAF.current);
-        scrollRAF.current = requestAnimationFrame(() => {
-          window.scrollBy({ top: dy!, behavior: "auto" });
-          scrollRAF.current = null;
-        });
-      }
-    };
-    document.addEventListener("dragover", handleDragOver, false);
-    return () => {
-      document.removeEventListener("dragover", handleDragOver, false);
+    const h = typeof window !== "undefined" ? window.innerHeight : 800;
+    let dy = 0;
+    if (clientY < ZONE) {
+      const t = 1 - clientY / ZONE;
+      dy = -Math.round(8 + t * 16);
+    } else if (clientY > h - ZONE) {
+      const t = (clientY - (h - ZONE)) / ZONE;
+      dy = Math.round(8 + t * 16);
+    }
+    if (dy !== 0 && typeof window !== "undefined") {
       if (scrollRAF.current != null) cancelAnimationFrame(scrollRAF.current);
-    };
-  }, [isDragging]);
+      scrollRAF.current = requestAnimationFrame(() => {
+        window.scrollBy({ top: dy!, behavior: "auto" });
+        scrollRAF.current = null;
+      });
+    }
+  }, []);
 
-  const handleSectionDragStart = (e: React.DragEvent, index: number) => {
-    e.dataTransfer.setData("text/plain", `section:${index}`);
-    e.dataTransfer.effectAllowed = "move";
-    setDraggingSection(index);
-  };
-  const handleSectionDragEnd = () => {
-    setDraggingSection(null);
-    setDragOverSection(null);
-  };
-  const handleSectionDragOver = (e: React.DragEvent, index: number) => {
+  const startPointerDrag = useCallback(
+    (kind: "section" | "card", index: number) => {
+      pointerKindRef.current = kind;
+      pointerFromRef.current = index;
+      if (kind === "section") setDraggingSection(index);
+      else setDraggingCard(index);
+
+      const onMove = (e: PointerEvent) => {
+        e.preventDefault();
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        if (kind === "section") {
+          const i = getIndexFromElement(el, "section");
+          setDragOverSection(i);
+        } else {
+          const i = getIndexFromElement(el, "card");
+          setDragOverCard(i);
+        }
+        doScroll(e.clientY);
+      };
+      const onUp = (e: PointerEvent) => {
+        e.preventDefault();
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        const toIndex = kind === "section" ? getIndexFromElement(el, "section") : getIndexFromElement(el, "card");
+        const fromIndex = pointerFromRef.current;
+        if (toIndex !== null && fromIndex !== toIndex) {
+          if (kind === "section") onSectionReorder(fromIndex, toIndex);
+          else onServiceCardReorder(fromIndex, toIndex);
+        }
+        pointerKindRef.current = null;
+        setDraggingSection(null);
+        setDraggingCard(null);
+        setDragOverSection(null);
+        setDragOverCard(null);
+        document.removeEventListener("pointermove", onMove, true);
+        document.removeEventListener("pointerup", onUp, true);
+        document.removeEventListener("pointercancel", onUp, true);
+        if (scrollRAF.current != null) cancelAnimationFrame(scrollRAF.current);
+      };
+      document.addEventListener("pointermove", onMove, { capture: true });
+      document.addEventListener("pointerup", onUp, { capture: true });
+      document.addEventListener("pointercancel", onUp, { capture: true });
+    },
+    [onSectionReorder, onServiceCardReorder, doScroll]
+  );
+
+  const handleSectionPointerDown = (e: React.PointerEvent, index: number) => {
     e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-    setDragOverSection(index);
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    startPointerDrag("section", index);
   };
-  const handleSectionDrop = (e: React.DragEvent, toIndex: number) => {
+  const handleCardPointerDown = (e: React.PointerEvent, index: number) => {
     e.preventDefault();
-    setDragOverSection(null);
-    setDraggingSection(null);
-    const raw = e.dataTransfer.getData("text/plain");
-    if (!raw.startsWith("section:")) return;
-    const fromIndex = parseInt(raw.replace("section:", ""), 10);
-    if (Number.isNaN(fromIndex) || fromIndex === toIndex) return;
-    onSectionReorder(fromIndex, toIndex);
-  };
-  const handleCardDragStart = (e: React.DragEvent, index: number) => {
-    e.dataTransfer.setData("text/plain", `card:${index}`);
-    e.dataTransfer.effectAllowed = "move";
-    setDraggingCard(index);
-  };
-  const handleCardDragEnd = () => {
-    setDraggingCard(null);
-    setDragOverCard(null);
-  };
-  const handleCardDragOver = (e: React.DragEvent, index: number) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-    setDragOverCard(index);
-  };
-  const handleCardDrop = (e: React.DragEvent, toIndex: number) => {
-    e.preventDefault();
-    setDragOverCard(null);
-    setDraggingCard(null);
-    const raw = e.dataTransfer.getData("text/plain");
-    if (!raw.startsWith("card:")) return;
-    const fromIndex = parseInt(raw.replace("card:", ""), 10);
-    if (Number.isNaN(fromIndex) || fromIndex === toIndex) return;
-    onServiceCardReorder(fromIndex, toIndex);
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    startPointerDrag("card", index);
   };
 
   const sections: Record<SectionId, React.ReactNode> = {
@@ -235,15 +243,16 @@ export default function SitePreview({
             <div
               key={i}
               className={`preview-card-wrap${dragOverCard === i ? " preview-drag-over" : ""}${draggingCard === i ? " preview-dragging" : ""}`}
-              onDragOver={(e) => handleCardDragOver(e, i)}
-              onDragLeave={() => setDragOverCard(null)}
-              onDrop={(e) => handleCardDrop(e, i)}
+              data-card-index={i}
             >
               <span
                 className="preview-drag-handle"
-                draggable
-                onDragStart={(e) => handleCardDragStart(e, i)}
-                onDragEnd={handleCardDragEnd}
+                role="button"
+                tabIndex={0}
+                onPointerDown={(e) => handleCardPointerDown(e, i)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") e.preventDefault();
+                }}
                 title="Déplacer la carte"
                 aria-label="Déplacer la carte"
               >
@@ -328,15 +337,16 @@ export default function SitePreview({
           <div
             key={id}
             className={`preview-section-wrap${dragOverSection === index ? " preview-drag-over" : ""}${draggingSection === index ? " preview-dragging" : ""}`}
-            onDragOver={(e) => handleSectionDragOver(e, index)}
-            onDragLeave={() => setDragOverSection(null)}
-            onDrop={(e) => handleSectionDrop(e, index)}
+            data-section-index={index}
           >
             <span
               className="preview-drag-handle"
-              draggable
-              onDragStart={(e) => handleSectionDragStart(e, index)}
-              onDragEnd={handleSectionDragEnd}
+              role="button"
+              tabIndex={0}
+              onPointerDown={(e) => handleSectionPointerDown(e, index)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") e.preventDefault();
+              }}
               title="Déplacer la section"
               aria-label="Déplacer la section"
             >

@@ -318,18 +318,20 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <SitePreview
-        content={content}
-        onHero={updateHero}
-        onAbout={updateAbout}
-        onService={updateService}
-        onServicesTitle={(v) => applyUpdate((c) => ({ ...c, services: { ...c.services, title: v } }))}
-        onContact={updateContact}
-        onSectionReorder={reorderSection}
-        onServiceCardReorder={reorderServiceCard}
-        imageCacheBust={imageCacheBust}
-        siteUrl={session && typeof session === "object" ? session.siteUrl : undefined}
-      />
+      <div className="preview-viewport">
+        <SitePreview
+          content={content}
+          onHero={updateHero}
+          onAbout={updateAbout}
+          onService={updateService}
+          onServicesTitle={(v) => applyUpdate((c) => ({ ...c, services: { ...c.services, title: v } }))}
+          onContact={updateContact}
+          onSectionReorder={reorderSection}
+          onServiceCardReorder={reorderServiceCard}
+          imageCacheBust={imageCacheBust}
+          siteUrl={session && typeof session === "object" ? session.siteUrl : undefined}
+        />
+      </div>
 
     </div>
   );
