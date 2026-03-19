@@ -32,6 +32,8 @@ export const DEFAULT_THEME: Required<ThemeColors> = {
 
 export type SectionId = "hero" | "about" | "services" | "contact" | "videoLoop" | "videoPlay";
 
+export interface Position { x: number; y: number; }
+
 export interface ContentData {
   hero?: {
     title: string;
@@ -40,6 +42,8 @@ export interface ContentData {
     imageWebp?: string;
     imageAvif?: string;
     video?: string;
+    imagePosition?: Position;
+    contentPosition?: Position;
   };
   about?: {
     title: string;
@@ -48,25 +52,33 @@ export interface ContentData {
     imageWebp?: string;
     imageAvif?: string;
     video?: string;
+    imagePosition?: Position;
+    contentPosition?: Position;
   };
   services?: {
     title: string;
     items: Array<{ title: string; description: string }>;
+    contentPosition?: Position;
   };
   contact?: {
     title: string;
     text: string;
     email: string;
     buttonLabel: string;
+    contentPosition?: Position;
   };
   videoLoop?: {
     title: string;
     video: string;
+    imagePosition?: Position;
+    contentPosition?: Position;
   };
   videoPlay?: {
     title: string;
     video: string;
     poster?: string;
+    imagePosition?: Position;
+    contentPosition?: Position;
   };
   theme?: ThemeColors;
   sectionOrder?: SectionId[];

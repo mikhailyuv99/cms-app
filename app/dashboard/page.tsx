@@ -10,6 +10,7 @@ import {
   type ContentData,
   type ContentFile,
   type SectionId,
+  type Position,
 } from "@/lib/content-types";
 import SitePreview from "./SitePreview";
 
@@ -47,6 +48,7 @@ export default function DashboardPage() {
   const [compressing, setCompressing] = useState(false);
   const [compressionProgress, setCompressionProgress] = useState(0);
   const [compressionLog, setCompressionLog] = useState("");
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   const applyPageUpdate = useCallback(
     (updater: (page: ContentData) => ContentData) => {
@@ -189,6 +191,22 @@ export default function DashboardPage() {
     });
   }
 
+  function handleImagePosition(section: SectionId, pos: Position) {
+    applyPageUpdate((c) => {
+      const s = c[section];
+      if (!s || typeof s !== "object") return c;
+      return { ...c, [section]: { ...s, imagePosition: pos } };
+    });
+  }
+
+  function handleContentPosition(section: SectionId, pos: Position) {
+    applyPageUpdate((c) => {
+      const s = c[section];
+      if (!s || typeof s !== "object") return c;
+      return { ...c, [section]: { ...s, contentPosition: pos } };
+    });
+  }
+
   function handleUndo() {
     if (historyIndex <= 0 || !content) return;
     const newIndex = historyIndex - 1;
@@ -210,23 +228,36 @@ export default function DashboardPage() {
     }
   }
 
+  function xhrPost(url: string, body: FormData | string, headers?: Record<string, string>, onProgress?: (ratio: number) => void): Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", url);
+      if (headers) Object.entries(headers).forEach(([k, v]) => xhr.setRequestHeader(k, v));
+      xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress?.(e.loaded / e.total); };
+      xhr.onload = () => resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, json: () => Promise.resolve(JSON.parse(xhr.responseText)) });
+      xhr.onerror = () => reject(new Error("Erreur réseau"));
+      xhr.send(body);
+    });
+  }
+
   async function onImageFileChange(e: React.ChangeEvent<HTMLInputElement>, key: "hero" | "about") {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file || !content) return;
     setUploadingImage(key);
+    setUploadProgress(0);
     try {
       const form = new FormData();
       form.append("file", file);
       form.append("key", key);
-      const res = await fetch("/api/upload-image", { method: "POST", body: form });
+      const res = await xhrPost("/api/upload-image", form, undefined, (r) => setUploadProgress(r));
       if (!res.ok) {
         let msg = `Échec de l'upload (${res.status})`;
-        try { const data = await res.json(); msg = data.error || msg; } catch { /* non-JSON response */ }
+        try { const data = await res.json() as { error?: string }; msg = data.error || msg; } catch { /* non-JSON response */ }
         setPublishMessage(msg);
         return;
       }
-      const data = await res.json();
+      const data = await res.json() as { path: string; pathWebp?: string; pathAvif?: string };
       if (key === "hero") {
         applyPageUpdate((c) => ({
           ...c,
@@ -295,16 +326,17 @@ export default function DashboardPage() {
     const { default_branch: branch } = await repoRes.json();
 
     // 1 — Create blob (Git Data API: handles large binary reliably)
-    const blobRes = await fetch(`${api}/git/blobs`, {
-      method: "POST",
-      headers: h,
-      body: JSON.stringify({ content: base64, encoding: "base64" }),
-    });
+    const blobRes = await xhrPost(
+      `${api}/git/blobs`,
+      JSON.stringify({ content: base64, encoding: "base64" }),
+      h,
+      (r) => setUploadProgress(r),
+    );
     if (!blobRes.ok) {
       const err = await blobRes.json().catch(() => ({}));
       throw new Error((err as { message?: string }).message || `Erreur blob (${blobRes.status})`);
     }
-    const { sha: blobSha } = await blobRes.json();
+    const { sha: blobSha } = await blobRes.json() as { sha: string };
 
     // 2 — Get current branch HEAD
     const refRes = await fetch(`${api}/git/ref/heads/${branch}`, { headers: h });
@@ -381,6 +413,7 @@ export default function DashboardPage() {
     }
 
     setUploadingVideo(key as "hero" | "about");
+    setUploadProgress(0);
     try {
       const ext = videoFile.type === "video/webm" ? "webm" : "mp4";
       const filePath = `images/${key}.${ext}`;
@@ -570,9 +603,13 @@ export default function DashboardPage() {
 
       {(uploadingImage || uploadingVideo) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="flex flex-col items-center gap-4 rounded-2xl border border-[var(--cms-border)] bg-[var(--cms-surface)] px-8 py-6 shadow-2xl">
+          <div className="flex flex-col items-center gap-4 rounded-2xl border border-[var(--cms-border)] bg-[var(--cms-surface)] px-10 py-8 shadow-2xl max-w-sm w-full mx-4">
             <div className="h-10 w-10 rounded-full border-2 border-[var(--cms-border)] border-t-white animate-spin" />
             <p className="text-sm font-medium text-[var(--cms-text)]">Envoi en cours…</p>
+            <div className="w-full bg-[var(--cms-bg)] rounded-full h-2 overflow-hidden">
+              <div className="h-full bg-white rounded-full transition-all duration-300" style={{ width: `${Math.round(uploadProgress * 100)}%` }} />
+            </div>
+            <p className="text-xs text-[var(--cms-text-muted)]">{Math.round(uploadProgress * 100)}%</p>
           </div>
         </div>
       )}
@@ -589,6 +626,8 @@ export default function DashboardPage() {
           onVideoPlayTitle={(v) => applyPageUpdate((c) => ({ ...c, videoPlay: { ...(c.videoPlay ?? { title: "", video: "" }), title: v } }))}
           onSectionReorder={reorderSection}
           onServiceCardReorder={reorderServiceCard}
+          onImagePosition={handleImagePosition}
+          onContentPosition={handleContentPosition}
           imageCacheBust={imageCacheBust}
           siteUrl={session && typeof session === "object" ? session.siteUrl : undefined}
           pageOrder={showPageTabs ? pageOrder : undefined}

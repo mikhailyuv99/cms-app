@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import type { ContentData, SectionId } from "@/lib/content-types";
+import type { ContentData, SectionId, Position } from "@/lib/content-types";
 import { mergeTheme, getEffectiveSectionOrder } from "@/lib/content-types";
 import "./preview.css";
 
@@ -114,6 +114,148 @@ function HeroVideo({
   );
 }
 
+const SNAP_THRESHOLD = 8;
+const GUIDE_LINES = [0, 25, 50, 75, 100];
+
+function snap(val: number, threshold: number, containerPx: number): { value: number; snapped: boolean; guide: number | null } {
+  for (const g of GUIDE_LINES) {
+    const gPx = (g / 100) * containerPx;
+    const vPx = (val / 100) * containerPx;
+    if (Math.abs(vPx - gPx) < threshold) return { value: g, snapped: true, guide: g };
+  }
+  return { value: val, snapped: false, guide: null };
+}
+
+function DraggableMedia({
+  position,
+  onPosition,
+  children,
+  className,
+}: {
+  position?: Position;
+  onPosition: (p: Position) => void;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const dragging = useRef(false);
+  const startRef = useRef({ px: 0, py: 0, ox: 50, oy: 50 });
+
+  const x = position?.x ?? 50;
+  const y = position?.y ?? 50;
+
+  const onDown = useCallback((e: React.PointerEvent) => {
+    if ((e.target as HTMLElement).closest(".preview-media-btn, .preview-media-bar, .preview-media-bar-inline, video[controls]")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    dragging.current = true;
+    startRef.current = { px: e.clientX, py: e.clientY, ox: x, oy: y };
+  }, [x, y]);
+
+  const onMove = useCallback((e: React.PointerEvent) => {
+    if (!dragging.current || !containerRef.current) return;
+    e.preventDefault();
+    const rect = containerRef.current.getBoundingClientRect();
+    const dx = ((e.clientX - startRef.current.px) / rect.width) * -100;
+    const dy = ((e.clientY - startRef.current.py) / rect.height) * -100;
+    const nx = Math.max(0, Math.min(100, startRef.current.ox + dx));
+    const ny = Math.max(0, Math.min(100, startRef.current.oy + dy));
+    onPosition({ x: Math.round(nx), y: Math.round(ny) });
+  }, [onPosition]);
+
+  const onUp = useCallback(() => { dragging.current = false; }, []);
+
+  return (
+    <div
+      ref={containerRef}
+      className={className}
+      style={{ cursor: "grab" }}
+      onPointerDown={onDown}
+      onPointerMove={onMove}
+      onPointerUp={onUp}
+      onPointerCancel={onUp}
+    >
+      {children}
+    </div>
+  );
+}
+
+function DraggableContent({
+  position,
+  onPosition,
+  children,
+  sectionRef,
+}: {
+  position?: Position;
+  onPosition: (p: Position) => void;
+  children: React.ReactNode;
+  sectionRef: React.RefObject<HTMLElement | null>;
+}) {
+  const [isDragging, setIsDragging] = useState(false);
+  const [activeGuides, setActiveGuides] = useState<{ gx: number | null; gy: number | null }>({ gx: null, gy: null });
+  const startRef = useRef({ px: 0, py: 0, ox: 50, oy: 50 });
+  const hasCustomPos = position != null;
+  const x = position?.x ?? 50;
+  const y = position?.y ?? 50;
+
+  const onDown = useCallback((e: React.PointerEvent) => {
+    if ((e.target as HTMLElement).closest("textarea, input")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    setIsDragging(true);
+    startRef.current = { px: e.clientX, py: e.clientY, ox: x, oy: y };
+  }, [x, y]);
+
+  const onMove = useCallback((e: React.PointerEvent) => {
+    if (!isDragging || !sectionRef.current) return;
+    e.preventDefault();
+    const rect = sectionRef.current.getBoundingClientRect();
+    const dx = ((e.clientX - startRef.current.px) / rect.width) * 100;
+    const dy = ((e.clientY - startRef.current.py) / rect.height) * 100;
+    const rawX = Math.max(0, Math.min(100, startRef.current.ox + dx));
+    const rawY = Math.max(0, Math.min(100, startRef.current.oy + dy));
+    const sx = snap(rawX, SNAP_THRESHOLD, rect.width);
+    const sy = snap(rawY, SNAP_THRESHOLD, rect.height);
+    setActiveGuides({ gx: sx.guide, gy: sy.guide });
+    onPosition({ x: Math.round(sx.value * 10) / 10, y: Math.round(sy.value * 10) / 10 });
+  }, [isDragging, onPosition, sectionRef]);
+
+  const onUp = useCallback(() => {
+    setIsDragging(false);
+    setActiveGuides({ gx: null, gy: null });
+  }, []);
+
+  const posStyle: React.CSSProperties = hasCustomPos
+    ? { position: "absolute", left: `${x}%`, top: `${y}%`, transform: "translate(-50%, -50%)", cursor: "grab", zIndex: 2 }
+    : { position: "relative", cursor: "grab", zIndex: 2 };
+
+  return (
+    <>
+      {isDragging && (
+        <div className="preview-guides" style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 1 }}>
+          {GUIDE_LINES.map((g) => (
+            <div key={`gx-${g}`} className={`preview-guide-v${activeGuides.gx === g ? " preview-guide-active" : ""}`} style={{ left: `${g}%` }} />
+          ))}
+          {GUIDE_LINES.map((g) => (
+            <div key={`gy-${g}`} className={`preview-guide-h${activeGuides.gy === g ? " preview-guide-active" : ""}`} style={{ top: `${g}%` }} />
+          ))}
+        </div>
+      )}
+      <div
+        style={posStyle}
+        onPointerDown={onDown}
+        onPointerMove={onMove}
+        onPointerUp={onUp}
+        onPointerCancel={onUp}
+      >
+        {children}
+      </div>
+    </>
+  );
+}
+
 interface SitePreviewProps {
   content: ContentData;
   onHero: (field: keyof NonNullable<ContentData["hero"]>, value: string) => void;
@@ -125,6 +267,8 @@ interface SitePreviewProps {
   onVideoPlayTitle: (value: string) => void;
   onSectionReorder: (fromIndex: number, toIndex: number) => void;
   onServiceCardReorder: (fromIndex: number, toIndex: number) => void;
+  onImagePosition: (section: SectionId, pos: Position) => void;
+  onContentPosition: (section: SectionId, pos: Position) => void;
   imageCacheBust?: number;
   siteUrl?: string;
   pageOrder?: string[];
@@ -148,6 +292,8 @@ export default function SitePreview({
   onVideoPlayTitle,
   onSectionReorder,
   onServiceCardReorder,
+  onImagePosition,
+  onContentPosition,
   imageCacheBust,
   siteUrl,
   pageOrder,
@@ -157,6 +303,12 @@ export default function SitePreview({
   const showNav = pageOrder && pageOrder.length > 1 && onPageChange;
   const theme = mergeTheme(content.theme);
   const sectionOrder = getEffectiveSectionOrder(content);
+  const heroRef = useRef<HTMLElement>(null);
+  const aboutRef = useRef<HTMLElement>(null);
+  const videoLoopRef = useRef<HTMLElement>(null);
+  const videoPlayRef = useRef<HTMLElement>(null);
+  const contactRef = useRef<HTMLElement>(null);
+  const servicesRef = useRef<HTMLElement>(null);
   const [dragOverSection, setDragOverSection] = useState<number | null>(null);
   const [dragOverCard, setDragOverCard] = useState<number | null>(null);
   const [draggingSection, setDraggingSection] = useState<number | null>(null);
@@ -243,137 +395,71 @@ export default function SitePreview({
   };
 
   const sections: Record<SectionId, React.ReactNode | null> = {
-    hero: content.hero ? (
-      <header key="hero" className="preview-hero">
-        <div className="preview-hero__bg" />
-        <div className="preview-hero__media">
-          {content.hero.video ? (
-            <HeroVideo
-              className="preview-hero__image"
-              poster={imageSrc(content.hero.image, siteUrl, imageCacheBust)}
-              src={imageSrc(content.hero.video, siteUrl, imageCacheBust)}
-            />
-          ) : content.hero.imageAvif || content.hero.imageWebp ? (
-            <picture>
-              {content.hero.imageAvif && (
-                <source type="image/avif" src={imageSrc(content.hero.imageAvif, siteUrl, imageCacheBust)} />
-              )}
-              {content.hero.imageWebp && (
-                <source type="image/webp" src={imageSrc(content.hero.imageWebp, siteUrl, imageCacheBust)} />
-              )}
-              <img
-                className="preview-hero__image"
-                src={imageSrc(content.hero.image, siteUrl, imageCacheBust)}
-                alt=""
-                loading="eager"
-                decoding="async"
-                fetchPriority="high"
-              />
-            </picture>
-          ) : (
-            <img
-              className="preview-hero__image"
-              src={imageSrc(content.hero.image, siteUrl, imageCacheBust)}
-              alt=""
-              loading="eager"
-              decoding="async"
-              fetchPriority="high"
-            />
-          )}
-        </div>
-        <div className="preview-hero__content">
-          <AutoTextarea
-            className="preview-input preview-hero__title"
-            style={{ color: theme.heroTitle }}
-            value={content.hero.title}
-            onChange={(v) => onHero("title", v)}
-            placeholder="Titre"
-            aria-label="Titre hero"
-          />
-          <AutoTextarea
-            className="preview-input preview-hero__subtitle"
-            style={{ color: theme.heroSubtitle }}
-            value={content.hero.subtitle}
-            onChange={(v) => onHero("subtitle", v)}
-            placeholder="Sous-titre"
-            aria-label="Sous-titre hero"
-          />
-        </div>
-        <div className="preview-media-bar">
-          <label htmlFor={UPLOAD_HERO_ID} className="preview-media-btn">Modifier image</label>
-          {content.hero.video && (
-            <label htmlFor={UPLOAD_HERO_VIDEO_ID} className="preview-media-btn">Modifier vidéo</label>
-          )}
-        </div>
-      </header>
-    ) : null,
-    about: content.about ? (
-      <section key="about" className="preview-about">
-        <div className="preview-about__grid">
-          <div className="preview-about__media">
+    hero: content.hero ? (() => {
+      const imgPos = content.hero.imagePosition ?? { x: 50, y: 50 };
+      const objPos = `${imgPos.x}% ${imgPos.y}%`;
+      return (
+        <header key="hero" className="preview-hero" ref={heroRef as React.Ref<HTMLElement>}>
+          <div className="preview-hero__bg" />
+          <DraggableMedia className="preview-hero__media" position={content.hero.imagePosition} onPosition={(p) => onImagePosition("hero", p)}>
+            {content.hero.video ? (
+              <HeroVideo className="preview-hero__image" poster={imageSrc(content.hero.image, siteUrl, imageCacheBust)} src={imageSrc(content.hero.video, siteUrl, imageCacheBust)} />
+            ) : content.hero.imageAvif || content.hero.imageWebp ? (
+              <picture>
+                {content.hero.imageAvif && <source type="image/avif" srcSet={imageSrc(content.hero.imageAvif, siteUrl, imageCacheBust)} />}
+                {content.hero.imageWebp && <source type="image/webp" srcSet={imageSrc(content.hero.imageWebp, siteUrl, imageCacheBust)} />}
+                <img className="preview-hero__image" style={{ objectPosition: objPos }} src={imageSrc(content.hero.image, siteUrl, imageCacheBust)} alt="" loading="eager" decoding="async" fetchPriority="high" />
+              </picture>
+            ) : (
+              <img className="preview-hero__image" style={{ objectPosition: objPos }} src={imageSrc(content.hero.image, siteUrl, imageCacheBust)} alt="" loading="eager" decoding="async" fetchPriority="high" />
+            )}
+          </DraggableMedia>
+          <DraggableContent position={content.hero.contentPosition} onPosition={(p) => onContentPosition("hero", p)} sectionRef={heroRef}>
+            <div className="preview-hero__content">
+              <AutoTextarea className="preview-input preview-hero__title" style={{ color: theme.heroTitle }} value={content.hero.title} onChange={(v) => onHero("title", v)} placeholder="Titre" aria-label="Titre hero" />
+              <AutoTextarea className="preview-input preview-hero__subtitle" style={{ color: theme.heroSubtitle }} value={content.hero.subtitle} onChange={(v) => onHero("subtitle", v)} placeholder="Sous-titre" aria-label="Sous-titre hero" />
+            </div>
+          </DraggableContent>
+          <div className="preview-media-bar">
+            <label htmlFor={UPLOAD_HERO_ID} className="preview-media-btn">Modifier image</label>
+            {content.hero.video && <label htmlFor={UPLOAD_HERO_VIDEO_ID} className="preview-media-btn">Modifier vidéo</label>}
+          </div>
+        </header>
+      );
+    })() : null,
+    about: content.about ? (() => {
+      const imgPos = content.about.imagePosition ?? { x: 50, y: 50 };
+      const objPos = `${imgPos.x}% ${imgPos.y}%`;
+      return (
+        <section key="about" className="preview-about" ref={aboutRef as React.Ref<HTMLElement>}>
+          <div className="preview-about__grid">
+            <div className="preview-about__media">
               {content.about.video ? (
-                <video
-                  className="preview-about__image"
-                  poster={imageSrc(content.about.image, siteUrl, imageCacheBust)}
-                  src={imageSrc(content.about.video, siteUrl, imageCacheBust)}
-                  muted
-                  loop
-                  playsInline
-                  controls
-                />
+                <video className="preview-about__image" style={{ objectPosition: objPos }} poster={imageSrc(content.about.image, siteUrl, imageCacheBust)} src={imageSrc(content.about.video, siteUrl, imageCacheBust)} muted loop playsInline controls />
               ) : content.about.imageAvif || content.about.imageWebp ? (
                 <picture>
-                  {content.about.imageAvif && (
-                    <source type="image/avif" src={imageSrc(content.about.imageAvif, siteUrl, imageCacheBust)} />
-                  )}
-                  {content.about.imageWebp && (
-                    <source type="image/webp" src={imageSrc(content.about.imageWebp, siteUrl, imageCacheBust)} />
-                  )}
-                  <img
-                    className="preview-about__image"
-                    src={imageSrc(content.about.image, siteUrl, imageCacheBust)}
-                    alt=""
-                    loading="eager"
-                    decoding="async"
-                  />
+                  {content.about.imageAvif && <source type="image/avif" srcSet={imageSrc(content.about.imageAvif, siteUrl, imageCacheBust)} />}
+                  {content.about.imageWebp && <source type="image/webp" srcSet={imageSrc(content.about.imageWebp, siteUrl, imageCacheBust)} />}
+                  <img className="preview-about__image" style={{ objectPosition: objPos }} src={imageSrc(content.about.image, siteUrl, imageCacheBust)} alt="" loading="eager" decoding="async" />
                 </picture>
               ) : (
-                <img
-                  className="preview-about__image"
-                  src={imageSrc(content.about.image, siteUrl, imageCacheBust)}
-                  alt=""
-                  loading="eager"
-                  decoding="async"
-                />
+                <img className="preview-about__image" style={{ objectPosition: objPos }} src={imageSrc(content.about.image, siteUrl, imageCacheBust)} alt="" loading="eager" decoding="async" />
               )}
               <div className="preview-media-bar-inline">
                 <label htmlFor={UPLOAD_ABOUT_ID} className="preview-media-btn">Modifier image</label>
-                {content.about.video && (
-                  <label htmlFor={UPLOAD_ABOUT_VIDEO_ID} className="preview-media-btn">Modifier vidéo</label>
-                )}
+                {content.about.video && <label htmlFor={UPLOAD_ABOUT_VIDEO_ID} className="preview-media-btn">Modifier vidéo</label>}
               </div>
+            </div>
+            <DraggableContent position={content.about.contentPosition} onPosition={(p) => onContentPosition("about", p)} sectionRef={aboutRef}>
+              <div className="preview-about__text">
+                <AutoTextarea className="preview-input preview-about__title" style={{ color: theme.aboutTitle }} value={content.about.title} onChange={(v) => onAbout("title", v)} placeholder="Titre" aria-label="Titre à propos" />
+                <AutoTextarea className="preview-input preview-about__body" style={{ color: theme.aboutText }} value={content.about.text} onChange={(v) => onAbout("text", v)} placeholder="Texte" aria-label="Texte à propos" />
+              </div>
+            </DraggableContent>
           </div>
-          <div className="preview-about__text">
-            <AutoTextarea
-              className="preview-input preview-about__title"
-              style={{ color: theme.aboutTitle }}
-              value={content.about.title}
-              onChange={(v) => onAbout("title", v)}
-              placeholder="Titre"
-              aria-label="Titre à propos"
-            />
-            <AutoTextarea
-              className="preview-input preview-about__body"
-              style={{ color: theme.aboutText }}
-              value={content.about.text}
-              onChange={(v) => onAbout("text", v)}
-              placeholder="Texte"
-              aria-label="Texte à propos"
-            />
-          </div>
-        </div>
-      </section>
-    ) : null,
+        </section>
+      );
+    })() : null,
     services: content.services ? (
       <section key="services" className="preview-services" style={{ background: theme.servicesBg }}>
         <AutoTextarea
@@ -429,52 +515,31 @@ export default function SitePreview({
       </section>
     ) : null,
     videoLoop: content.videoLoop ? (
-      <section key="videoLoop" className="preview-video-loop">
+      <section key="videoLoop" className="preview-video-loop" ref={videoLoopRef as React.Ref<HTMLElement>}>
         <div className="preview-video-loop__overlay" />
-        <div className="preview-video-loop__media">
+        <DraggableMedia className="preview-video-loop__media" position={content.videoLoop.imagePosition} onPosition={(p) => onImagePosition("videoLoop", p)}>
           {content.videoLoop.video && (
-            <HeroVideo
-              className="preview-video-loop__video"
-              src={imageSrc(content.videoLoop.video, siteUrl, imageCacheBust)}
-              poster=""
-            />
+            <HeroVideo className="preview-video-loop__video" src={imageSrc(content.videoLoop.video, siteUrl, imageCacheBust)} poster="" />
           )}
-        </div>
-        <AutoTextarea
-          className="preview-input preview-video-loop__title"
-          value={content.videoLoop.title}
-          onChange={onVideoLoopTitle}
-          placeholder="Titre"
-          aria-label="Titre vidéo boucle"
-        />
+        </DraggableMedia>
+        <DraggableContent position={content.videoLoop.contentPosition} onPosition={(p) => onContentPosition("videoLoop", p)} sectionRef={videoLoopRef}>
+          <AutoTextarea className="preview-input preview-video-loop__title" value={content.videoLoop.title} onChange={onVideoLoopTitle} placeholder="Titre" aria-label="Titre vidéo boucle" />
+        </DraggableContent>
         <div className="preview-media-bar">
           <label htmlFor="cms-upload-videoloop-video" className="preview-media-btn">Modifier vidéo</label>
         </div>
       </section>
     ) : null,
     videoPlay: content.videoPlay ? (
-      <section key="videoPlay" className="preview-video-play">
-        <AutoTextarea
-          className="preview-input preview-video-play__title"
-          value={content.videoPlay.title}
-          onChange={onVideoPlayTitle}
-          placeholder="Titre"
-          aria-label="Titre vidéo lecture"
-        />
+      <section key="videoPlay" className="preview-video-play" ref={videoPlayRef as React.Ref<HTMLElement>}>
+        <DraggableContent position={content.videoPlay.contentPosition} onPosition={(p) => onContentPosition("videoPlay", p)} sectionRef={videoPlayRef}>
+          <AutoTextarea className="preview-input preview-video-play__title" value={content.videoPlay.title} onChange={onVideoPlayTitle} placeholder="Titre" aria-label="Titre vidéo lecture" />
+        </DraggableContent>
         <div className="preview-video-play__media">
           {content.videoPlay.video ? (
-            <video
-              className="preview-video-play__video"
-              src={imageSrc(content.videoPlay.video, siteUrl, imageCacheBust)}
-              poster={content.videoPlay.poster ? imageSrc(content.videoPlay.poster, siteUrl, imageCacheBust) : undefined}
-              controls
-              playsInline
-              preload="metadata"
-            />
+            <video className="preview-video-play__video" src={imageSrc(content.videoPlay.video, siteUrl, imageCacheBust)} poster={content.videoPlay.poster ? imageSrc(content.videoPlay.poster, siteUrl, imageCacheBust) : undefined} controls playsInline preload="metadata" />
           ) : (
-            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#666" }}>
-              Aucune vidéo
-            </div>
+            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#666" }}>Aucune vidéo</div>
           )}
         </div>
         <div className="preview-media-bar-inline">
@@ -484,45 +549,15 @@ export default function SitePreview({
       </section>
     ) : null,
     contact: content.contact ? (
-      <section key="contact" className="preview-contact">
-        <AutoTextarea
-          className="preview-input preview-contact__title"
-          style={{ color: theme.contactTitle }}
-          value={content.contact.title}
-          onChange={(v) => onContact("title", v)}
-          placeholder="Titre contact"
-          aria-label="Titre contact"
-        />
-        <AutoTextarea
-          className="preview-input preview-contact__text"
-          style={{ color: theme.contactText }}
-          value={content.contact.text}
-          onChange={(v) => onContact("text", v)}
-          placeholder="Texte"
-          aria-label="Texte contact"
-        />
-        <span
-          className="preview-contact__cta"
-          style={{ background: theme.contactButtonBg, color: theme.contactButtonText }}
-        >
-          <input
-            className="preview-input preview-contact__cta-input"
-            value={content.contact.buttonLabel}
-            onChange={(e) => onContact("buttonLabel", e.target.value)}
-            placeholder="Bouton"
-            aria-label="Libellé bouton"
-            style={{ color: theme.contactButtonText }}
-          />
-        </span>
-        <input
-          type="email"
-          className="preview-input preview-contact__email"
-          style={{ color: theme.contactText }}
-          value={content.contact.email}
-          onChange={(e) => onContact("email", e.target.value)}
-          placeholder="Email"
-          aria-label="Email contact"
-        />
+      <section key="contact" className="preview-contact" ref={contactRef as React.Ref<HTMLElement>}>
+        <DraggableContent position={content.contact.contentPosition} onPosition={(p) => onContentPosition("contact", p)} sectionRef={contactRef}>
+          <AutoTextarea className="preview-input preview-contact__title" style={{ color: theme.contactTitle }} value={content.contact.title} onChange={(v) => onContact("title", v)} placeholder="Titre contact" aria-label="Titre contact" />
+          <AutoTextarea className="preview-input preview-contact__text" style={{ color: theme.contactText }} value={content.contact.text} onChange={(v) => onContact("text", v)} placeholder="Texte" aria-label="Texte contact" />
+          <span className="preview-contact__cta" style={{ background: theme.contactButtonBg, color: theme.contactButtonText }}>
+            <input className="preview-input preview-contact__cta-input" value={content.contact.buttonLabel} onChange={(e) => onContact("buttonLabel", e.target.value)} placeholder="Bouton" aria-label="Libellé bouton" style={{ color: theme.contactButtonText }} />
+          </span>
+          <input type="email" className="preview-input preview-contact__email" style={{ color: theme.contactText }} value={content.contact.email} onChange={(e) => onContact("email", e.target.value)} placeholder="Email" aria-label="Email contact" />
+        </DraggableContent>
       </section>
     ) : null,
   };
