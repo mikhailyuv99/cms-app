@@ -3,12 +3,9 @@ import { getSession } from "@/lib/auth";
 import { parseRepoUrl, getFileSha, putFileBinary } from "@/lib/github";
 
 const IMAGE_KEYS = ["hero", "about", "videoPlay-poster"] as const;
-const VIDEO_KEYS = ["hero-video", "about-video", "videoLoop-video", "videoPlay-video"] as const;
-const ALLOWED_KEYS = [...IMAGE_KEYS, ...VIDEO_KEYS] as const;
+const ALLOWED_KEYS = [...IMAGE_KEYS] as const;
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5 MB
-const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50 MB
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-const VIDEO_TYPES = ["video/mp4", "video/webm"];
 
 export async function POST(request: NextRequest) {
   const session = getSession();
@@ -26,32 +23,6 @@ export async function POST(request: NextRequest) {
 
   if (!file || !key || !ALLOWED_KEYS.includes(key as (typeof ALLOWED_KEYS)[number])) {
     return NextResponse.json({ error: "Fichier et key requis" }, { status: 400 });
-  }
-
-  const isVideo = VIDEO_KEYS.includes(key as (typeof VIDEO_KEYS)[number]);
-
-  if (isVideo) {
-    if (!VIDEO_TYPES.includes(file.type)) {
-      return NextResponse.json({ error: "Type vidéo non autorisé (MP4, WebM)" }, { status: 400 });
-    }
-    if (file.size > MAX_VIDEO_SIZE) {
-      return NextResponse.json({ error: "Vidéo trop volumineuse (max 50 Mo)" }, { status: 400 });
-    }
-    const ext = file.type === "video/webm" ? "webm" : "mp4";
-    const path = `images/${key}.${ext}`;
-    const bytes = await file.arrayBuffer();
-    const contentBase64 = Buffer.from(bytes).toString("base64");
-    const existingSha = await getFileSha(parsed.owner, parsed.repo, path);
-    const ok = await putFileBinary(
-      parsed.owner,
-      parsed.repo,
-      path,
-      contentBase64,
-      `Vidéo ${key} mise à jour via CMS`,
-      existingSha ?? undefined
-    );
-    if (!ok) return NextResponse.json({ error: "Échec de l'upload" }, { status: 500 });
-    return NextResponse.json({ path });
   }
 
   if (!IMAGE_TYPES.includes(file.type)) {

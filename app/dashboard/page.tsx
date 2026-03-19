@@ -258,36 +258,65 @@ export default function DashboardPage() {
     }
   }
 
-  const UPLOAD_LIMIT = 5.5 * 1024 * 1024; // ~5.5 MB safe for Netlify functions
+  async function uploadDirectToGitHub(file: File, filePath: string): Promise<string> {
+    const credRes = await fetch("/api/upload-credentials");
+    if (!credRes.ok) throw new Error("Impossible d'obtenir les identifiants");
+    const { token, owner, repo } = await credRes.json();
+
+    const arrayBuf = await file.arrayBuffer();
+    const base64 = btoa(
+      new Uint8Array(arrayBuf).reduce((s, b) => s + String.fromCharCode(b), "")
+    );
+
+    const shaRes = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`,
+      { headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github.v3+json" } }
+    );
+    let sha: string | undefined;
+    if (shaRes.ok) {
+      const existing = await shaRes.json();
+      sha = existing.sha;
+    }
+
+    const putRes = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github.v3+json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: `Vidéo ${filePath} mise à jour via CMS`,
+          content: base64,
+          ...(sha ? { sha } : {}),
+        }),
+      }
+    );
+    if (!putRes.ok) {
+      const err = await putRes.json().catch(() => ({}));
+      throw new Error((err as { message?: string }).message || `GitHub API error ${putRes.status}`);
+    }
+    return filePath;
+  }
 
   async function onVideoFileChange(e: React.ChangeEvent<HTMLInputElement>, key: string) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file || !content) return;
-    if (file.size > UPLOAD_LIMIT) {
-      setPublishMessage(`Vidéo trop volumineuse (${(file.size / 1024 / 1024).toFixed(1)} Mo). Max ~5 Mo pour l'hébergement actuel.`);
-      return;
-    }
     setUploadingVideo(key as "hero" | "about");
     try {
-      const form = new FormData();
-      form.append("file", file);
-      form.append("key", key);
-      const res = await fetch("/api/upload-image", { method: "POST", body: form });
-      if (!res.ok) {
-        let msg = `Échec de l'upload vidéo (${res.status})`;
-        try { const data = await res.json(); msg = data.error || msg; } catch { /* non-JSON response */ }
-        setPublishMessage(msg);
-        return;
-      }
-      const data = await res.json();
-      if (key === "hero-video") applyPageUpdate((c) => ({ ...c, hero: { ...c.hero, video: data.path } as NonNullable<ContentData["hero"]> }));
-      else if (key === "about-video") applyPageUpdate((c) => ({ ...c, about: { ...c.about, video: data.path } as NonNullable<ContentData["about"]> }));
-      else if (key === "videoLoop-video") applyPageUpdate((c) => ({ ...c, videoLoop: { ...(c.videoLoop ?? { title: "", video: "" }), video: data.path } }));
-      else if (key === "videoPlay-video") applyPageUpdate((c) => ({ ...c, videoPlay: { ...(c.videoPlay ?? { title: "", video: "" }), video: data.path } }));
+      const ext = file.type === "video/webm" ? "webm" : "mp4";
+      const filePath = `images/${key}.${ext}`;
+      const path = await uploadDirectToGitHub(file, filePath);
+      if (key === "hero-video") applyPageUpdate((c) => ({ ...c, hero: { ...c.hero, video: path } as NonNullable<ContentData["hero"]> }));
+      else if (key === "about-video") applyPageUpdate((c) => ({ ...c, about: { ...c.about, video: path } as NonNullable<ContentData["about"]> }));
+      else if (key === "videoLoop-video") applyPageUpdate((c) => ({ ...c, videoLoop: { ...(c.videoLoop ?? { title: "", video: "" }), video: path } }));
+      else if (key === "videoPlay-video") applyPageUpdate((c) => ({ ...c, videoPlay: { ...(c.videoPlay ?? { title: "", video: "" }), video: path } }));
       setImageCacheBust(Date.now());
     } catch (err) {
-      setPublishMessage(`Erreur lors de l'upload vidéo: ${err instanceof Error ? err.message : "réseau"}`);
+      setPublishMessage(`Erreur upload vidéo: ${err instanceof Error ? err.message : "réseau"}`);
     } finally {
       setUploadingVideo(null);
     }
