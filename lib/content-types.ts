@@ -30,7 +30,7 @@ export const DEFAULT_THEME: Required<ThemeColors> = {
   contactButtonText: "#0d0d0d",
 };
 
-export type SectionId = "hero" | "about" | "services" | "contact";
+export type SectionId = "hero" | "about" | "services" | "contact" | "videoLoop" | "videoPlay";
 
 export interface ContentData {
   hero?: {
@@ -59,21 +59,27 @@ export interface ContentData {
     email: string;
     buttonLabel: string;
   };
+  videoLoop?: {
+    title: string;
+    video: string;
+  };
+  videoPlay?: {
+    title: string;
+    video: string;
+    poster?: string;
+  };
   theme?: ThemeColors;
-  /** Ordre d’affichage des sections. Par défaut: hero, about, services, contact */
   sectionOrder?: SectionId[];
+  [key: string]: unknown;
 }
 
-export const ALL_SECTION_IDS: SectionId[] = ["hero", "about", "services", "contact"];
+export const ALL_SECTION_IDS: SectionId[] = ["hero", "about", "services", "contact", "videoLoop", "videoPlay"];
 
-/** Contenu multi-pages : chaque clé est un slug de page (ex. "index", "about"). */
 export interface ContentDataMultiPage {
   pages: Record<string, ContentData>;
-  /** Ordre des pages pour la navigation. Si absent, ordre des clés de `pages`. */
   pageOrder?: string[];
 }
 
-/** Contenu tel que stocké dans content.json : une page unique (ContentData) ou multi-pages. */
 export type ContentFile = ContentData | ContentDataMultiPage;
 
 export function isMultiPage(content: ContentFile): content is ContentDataMultiPage {
@@ -93,7 +99,6 @@ export function getPageOrder(content: ContentFile): string[] {
   return order.filter((slug) => slug in content.pages);
 }
 
-/** Retourne le contenu de la page courante (pour édition / prévisualisation). */
 export function getCurrentPageContent(content: ContentFile, pageSlug: string): ContentData {
   if (!isMultiPage(content)) return content;
   return content.pages[pageSlug] ?? {};

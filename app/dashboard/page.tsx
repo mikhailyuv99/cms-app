@@ -441,6 +441,8 @@ export default function DashboardPage() {
           onService={updateService}
           onServicesTitle={(v) => applyPageUpdate((c) => ({ ...c, services: { ...(c.services ?? { title: "", items: [] }), title: v } }))}
           onContact={updateContact}
+          onVideoLoopTitle={(v) => applyPageUpdate((c) => ({ ...c, videoLoop: { ...(c.videoLoop ?? { title: "", video: "" }), title: v } }))}
+          onVideoPlayTitle={(v) => applyPageUpdate((c) => ({ ...c, videoPlay: { ...(c.videoPlay ?? { title: "", video: "" }), title: v } }))}
           onSectionReorder={reorderSection}
           onServiceCardReorder={reorderServiceCard}
           imageCacheBust={imageCacheBust}

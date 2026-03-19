@@ -83,6 +83,8 @@ interface SitePreviewProps {
   onService: (index: number, field: "title" | "description", value: string) => void;
   onServicesTitle: (value: string) => void;
   onContact: (field: keyof NonNullable<ContentData["contact"]>, value: string) => void;
+  onVideoLoopTitle: (value: string) => void;
+  onVideoPlayTitle: (value: string) => void;
   onSectionReorder: (fromIndex: number, toIndex: number) => void;
   onServiceCardReorder: (fromIndex: number, toIndex: number) => void;
   imageCacheBust?: number;
@@ -96,6 +98,8 @@ export default function SitePreview({
   onService,
   onServicesTitle,
   onContact,
+  onVideoLoopTitle,
+  onVideoPlayTitle,
   onSectionReorder,
   onServiceCardReorder,
   imageCacheBust,
@@ -385,6 +389,50 @@ export default function SitePreview({
               </div>
             </div>
           ))}
+        </div>
+      </section>
+    ) : null,
+    videoLoop: content.videoLoop ? (
+      <section key="videoLoop" className="preview-video-loop">
+        <div className="preview-video-loop__overlay" />
+        <div className="preview-video-loop__media">
+          {content.videoLoop.video && (
+            <HeroVideo
+              className="preview-video-loop__video"
+              src={imageSrc(content.videoLoop.video, siteUrl, imageCacheBust)}
+              poster=""
+            />
+          )}
+        </div>
+        <input
+          className="preview-input preview-video-loop__title"
+          value={content.videoLoop.title}
+          onChange={(e) => onVideoLoopTitle(e.target.value)}
+          placeholder="Titre"
+          aria-label="Titre vidéo boucle"
+        />
+      </section>
+    ) : null,
+    videoPlay: content.videoPlay ? (
+      <section key="videoPlay" className="preview-video-play">
+        <input
+          className="preview-input preview-video-play__title"
+          value={content.videoPlay.title}
+          onChange={(e) => onVideoPlayTitle(e.target.value)}
+          placeholder="Titre"
+          aria-label="Titre vidéo lecture"
+        />
+        <div className="preview-video-play__media">
+          {content.videoPlay.video && (
+            <video
+              className="preview-video-play__video"
+              src={imageSrc(content.videoPlay.video, siteUrl, imageCacheBust)}
+              poster={content.videoPlay.poster ? imageSrc(content.videoPlay.poster, siteUrl, imageCacheBust) : undefined}
+              controls
+              playsInline
+              preload="metadata"
+            />
+          )}
         </div>
       </section>
     ) : null,
