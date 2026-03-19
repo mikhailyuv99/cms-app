@@ -44,6 +44,9 @@ export default function DashboardPage() {
   const [uploadingImage, setUploadingImage] = useState<"hero" | "about" | null>(null);
   const [uploadingVideo, setUploadingVideo] = useState<"hero" | "about" | null>(null);
   const [imageCacheBust, setImageCacheBust] = useState(0);
+  const [compressing, setCompressing] = useState(false);
+  const [compressionProgress, setCompressionProgress] = useState(0);
+  const [compressionLog, setCompressionLog] = useState("");
 
   const applyPageUpdate = useCallback(
     (updater: (page: ContentData) => ContentData) => {
@@ -353,11 +356,35 @@ export default function DashboardPage() {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file || !content) return;
+
+    let videoFile = file;
+
+    if ((await import("@/lib/compress-video")).needsCompression(file)) {
+      setCompressing(true);
+      setCompressionProgress(0);
+      setCompressionLog(`Fichier de ${(file.size / 1024 / 1024).toFixed(0)} Mo — compression nécessaire`);
+      try {
+        const { compressVideo } = await import("@/lib/compress-video");
+        videoFile = await compressVideo(
+          file,
+          (r) => setCompressionProgress(r),
+          (msg) => setCompressionLog(msg),
+        );
+      } catch (err) {
+        setPublishMessage(
+          `Erreur compression: ${err instanceof Error ? err.message : "inconnue"}. Compressez manuellement sous 100 Mo.`,
+        );
+        setCompressing(false);
+        return;
+      }
+      setCompressing(false);
+    }
+
     setUploadingVideo(key as "hero" | "about");
     try {
-      const ext = file.type === "video/webm" ? "webm" : "mp4";
+      const ext = videoFile.type === "video/webm" ? "webm" : "mp4";
       const filePath = `images/${key}.${ext}`;
-      const path = await uploadDirectToGitHub(file, filePath);
+      const path = await uploadDirectToGitHub(videoFile, filePath);
       if (key === "hero-video") applyPageUpdate((c) => ({ ...c, hero: { ...c.hero, video: path } as NonNullable<ContentData["hero"]> }));
       else if (key === "about-video") applyPageUpdate((c) => ({ ...c, about: { ...c.about, video: path } as NonNullable<ContentData["about"]> }));
       else if (key === "videoLoop-video") applyPageUpdate((c) => ({ ...c, videoLoop: { ...(c.videoLoop ?? { title: "", video: "" }), video: path } }));
@@ -523,6 +550,23 @@ export default function DashboardPage() {
       <input id="cms-upload-videoloop-video" type="file" accept="video/mp4,video/webm" className="sr-only" onChange={(e) => onVideoFileChange(e, "videoLoop-video")} aria-label="Remplacer la vidéo boucle" />
       <input id="cms-upload-videoplay-video" type="file" accept="video/mp4,video/webm" className="sr-only" onChange={(e) => onVideoFileChange(e, "videoPlay-video")} aria-label="Remplacer la vidéo lecture" />
       <input id="cms-upload-videoplay-poster" type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="sr-only" onChange={onPosterFileChange} aria-label="Remplacer le poster" />
+
+      {compressing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="flex flex-col items-center gap-4 rounded-2xl border border-[var(--cms-border)] bg-[var(--cms-surface)] px-10 py-8 shadow-2xl max-w-sm w-full mx-4">
+            <div className="h-10 w-10 rounded-full border-2 border-[var(--cms-border)] border-t-white animate-spin" />
+            <p className="text-sm font-medium text-[var(--cms-text)]">Compression vidéo…</p>
+            <div className="w-full bg-[var(--cms-bg)] rounded-full h-2 overflow-hidden">
+              <div
+                className="h-full bg-white rounded-full transition-all duration-300"
+                style={{ width: `${Math.round(compressionProgress * 100)}%` }}
+              />
+            </div>
+            <p className="text-xs text-[var(--cms-text-muted)] text-center">{compressionLog}</p>
+            <p className="text-xs text-[var(--cms-text-muted)]">{Math.round(compressionProgress * 100)}%</p>
+          </div>
+        </div>
+      )}
 
       {(uploadingImage || uploadingVideo) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">

@@ -10,6 +10,8 @@
     "hash-password": "node scripts/hash-password.js"
   },
   "dependencies": {
+    "@ffmpeg/ffmpeg": "^0.12.15",
+    "@ffmpeg/util": "^0.12.2",
     "bcryptjs": "^2.4.3",
     "next": "^14.2.0",
     "octokit": "^3.1.0",
