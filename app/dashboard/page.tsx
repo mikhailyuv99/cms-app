@@ -222,11 +222,13 @@ export default function DashboardPage() {
       form.append("file", file);
       form.append("key", key);
       const res = await fetch("/api/upload-image", { method: "POST", body: form });
-      const data = await res.json();
       if (!res.ok) {
-        setPublishMessage(data.error || "Échec de l'upload");
+        let msg = `Échec de l'upload (${res.status})`;
+        try { const data = await res.json(); msg = data.error || msg; } catch { /* non-JSON response */ }
+        setPublishMessage(msg);
         return;
       }
+      const data = await res.json();
       if (key === "hero") {
         applyPageUpdate((c) => ({
           ...c,
@@ -256,28 +258,36 @@ export default function DashboardPage() {
     }
   }
 
+  const UPLOAD_LIMIT = 5.5 * 1024 * 1024; // ~5.5 MB safe for Netlify functions
+
   async function onVideoFileChange(e: React.ChangeEvent<HTMLInputElement>, key: string) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file || !content) return;
+    if (file.size > UPLOAD_LIMIT) {
+      setPublishMessage(`Vidéo trop volumineuse (${(file.size / 1024 / 1024).toFixed(1)} Mo). Max ~5 Mo pour l'hébergement actuel.`);
+      return;
+    }
     setUploadingVideo(key as "hero" | "about");
     try {
       const form = new FormData();
       form.append("file", file);
       form.append("key", key);
       const res = await fetch("/api/upload-image", { method: "POST", body: form });
-      const data = await res.json();
       if (!res.ok) {
-        setPublishMessage(data.error || "Échec de l'upload vidéo");
+        let msg = `Échec de l'upload vidéo (${res.status})`;
+        try { const data = await res.json(); msg = data.error || msg; } catch { /* non-JSON response */ }
+        setPublishMessage(msg);
         return;
       }
+      const data = await res.json();
       if (key === "hero-video") applyPageUpdate((c) => ({ ...c, hero: { ...c.hero, video: data.path } as NonNullable<ContentData["hero"]> }));
       else if (key === "about-video") applyPageUpdate((c) => ({ ...c, about: { ...c.about, video: data.path } as NonNullable<ContentData["about"]> }));
       else if (key === "videoLoop-video") applyPageUpdate((c) => ({ ...c, videoLoop: { ...(c.videoLoop ?? { title: "", video: "" }), video: data.path } }));
       else if (key === "videoPlay-video") applyPageUpdate((c) => ({ ...c, videoPlay: { ...(c.videoPlay ?? { title: "", video: "" }), video: data.path } }));
       setImageCacheBust(Date.now());
-    } catch {
-      setPublishMessage("Erreur lors de l'upload vidéo");
+    } catch (err) {
+      setPublishMessage(`Erreur lors de l'upload vidéo: ${err instanceof Error ? err.message : "réseau"}`);
     } finally {
       setUploadingVideo(null);
     }
@@ -293,11 +303,13 @@ export default function DashboardPage() {
       form.append("file", file);
       form.append("key", "videoPlay-poster");
       const res = await fetch("/api/upload-image", { method: "POST", body: form });
-      const data = await res.json();
       if (!res.ok) {
-        setPublishMessage(data.error || "Échec de l'upload");
+        let msg = `Échec de l'upload (${res.status})`;
+        try { const data = await res.json(); msg = data.error || msg; } catch { /* non-JSON response */ }
+        setPublishMessage(msg);
         return;
       }
+      const data = await res.json();
       applyPageUpdate((c) => ({ ...c, videoPlay: { ...(c.videoPlay ?? { title: "", video: "" }), poster: data.path } }));
       setImageCacheBust(Date.now());
     } catch {
