@@ -25,7 +25,14 @@ export async function GET(request: NextRequest) {
     });
     if (Array.isArray(data) || !("content" in data)) return new NextResponse("Not found", { status: 404 });
     const buffer = Buffer.from(data.content, "base64");
-    const contentType = path.endsWith(".png") ? "image/png" : path.endsWith(".gif") ? "image/gif" : path.endsWith(".webp") ? "image/webp" : "image/jpeg";
+    const contentType =
+      path.endsWith(".png") ? "image/png"
+      : path.endsWith(".gif") ? "image/gif"
+      : path.endsWith(".webp") ? "image/webp"
+      : path.endsWith(".avif") ? "image/avif"
+      : path.endsWith(".mp4") ? "video/mp4"
+      : path.endsWith(".webm") ? "video/webm"
+      : "image/jpeg";
     return new NextResponse(buffer, {
       headers: {
         "Content-Type": contentType,

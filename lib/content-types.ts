@@ -37,11 +37,17 @@ export interface ContentData {
     title: string;
     subtitle: string;
     image: string;
+    imageWebp?: string;
+    imageAvif?: string;
+    video?: string;
   };
   about: {
     title: string;
     text: string;
     image: string;
+    imageWebp?: string;
+    imageAvif?: string;
+    video?: string;
   };
   services: {
     title: string;

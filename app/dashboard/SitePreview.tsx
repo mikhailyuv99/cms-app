@@ -41,6 +41,8 @@ function imageSrc(url: string, siteUrl?: string, cacheBust?: number): string {
 
 const UPLOAD_HERO_ID = "cms-upload-hero";
 const UPLOAD_ABOUT_ID = "cms-upload-about";
+const UPLOAD_HERO_VIDEO_ID = "cms-upload-hero-video";
+const UPLOAD_ABOUT_VIDEO_ID = "cms-upload-about-video";
 
 interface SitePreviewProps {
   content: ContentData;
@@ -163,14 +165,50 @@ export default function SitePreview({
             className="preview-image-wrap"
             style={{ position: "absolute", inset: 0, cursor: "pointer", margin: 0 }}
           >
-            <img
-              className="preview-hero__image"
-              src={imageSrc(content.hero.image, siteUrl, imageCacheBust)}
-              alt=""
-              loading="eager"
-              decoding="async"
-              fetchPriority="high"
-            />
+            {content.hero.video ? (
+              <video
+                className="preview-hero__image"
+                poster={imageSrc(content.hero.image, siteUrl, imageCacheBust)}
+                src={imageSrc(content.hero.video, siteUrl, imageCacheBust)}
+                muted
+                loop
+                playsInline
+                autoPlay
+              />
+            ) : content.hero.imageAvif || content.hero.imageWebp ? (
+              <picture>
+                {content.hero.imageAvif && (
+                  <source type="image/avif" src={imageSrc(content.hero.imageAvif, siteUrl, imageCacheBust)} />
+                )}
+                {content.hero.imageWebp && (
+                  <source type="image/webp" src={imageSrc(content.hero.imageWebp, siteUrl, imageCacheBust)} />
+                )}
+                <img
+                  className="preview-hero__image"
+                  src={imageSrc(content.hero.image, siteUrl, imageCacheBust)}
+                  alt=""
+                  loading="eager"
+                  decoding="async"
+                  fetchPriority="high"
+                />
+              </picture>
+            ) : (
+              <img
+                className="preview-hero__image"
+                src={imageSrc(content.hero.image, siteUrl, imageCacheBust)}
+                alt=""
+                loading="eager"
+                decoding="async"
+                fetchPriority="high"
+              />
+            )}
+          </label>
+          <label
+            htmlFor={UPLOAD_HERO_VIDEO_ID}
+            className="preview-video-label"
+            title="Remplacer la vidéo"
+          >
+            Vidéo
           </label>
         </div>
         <div className="preview-hero__content">
@@ -200,15 +238,46 @@ export default function SitePreview({
             <label
               htmlFor={UPLOAD_ABOUT_ID}
               className="preview-image-wrap"
-              style={{ cursor: "pointer", margin: 0, display: "block" }}
+              style={{ cursor: "pointer", margin: 0, display: "block", position: "relative" }}
             >
-              <img
-                className="preview-about__image"
-                src={imageSrc(content.about.image, siteUrl, imageCacheBust)}
-                alt=""
-                loading="eager"
-                decoding="async"
-              />
+              {content.about.video ? (
+                <video
+                  className="preview-about__image"
+                  poster={imageSrc(content.about.image, siteUrl, imageCacheBust)}
+                  src={imageSrc(content.about.video, siteUrl, imageCacheBust)}
+                  muted
+                  loop
+                  playsInline
+                  controls
+                />
+              ) : content.about.imageAvif || content.about.imageWebp ? (
+                <picture>
+                  {content.about.imageAvif && (
+                    <source type="image/avif" src={imageSrc(content.about.imageAvif, siteUrl, imageCacheBust)} />
+                  )}
+                  {content.about.imageWebp && (
+                    <source type="image/webp" src={imageSrc(content.about.imageWebp, siteUrl, imageCacheBust)} />
+                  )}
+                  <img
+                    className="preview-about__image"
+                    src={imageSrc(content.about.image, siteUrl, imageCacheBust)}
+                    alt=""
+                    loading="eager"
+                    decoding="async"
+                  />
+                </picture>
+              ) : (
+                <img
+                  className="preview-about__image"
+                  src={imageSrc(content.about.image, siteUrl, imageCacheBust)}
+                  alt=""
+                  loading="eager"
+                  decoding="async"
+                />
+              )}
+            </label>
+            <label htmlFor={UPLOAD_ABOUT_VIDEO_ID} className="preview-video-label preview-video-label--block" title="Remplacer la vidéo">
+              Vidéo
             </label>
           </div>
           <div className="preview-about__text">

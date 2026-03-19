@@ -165,6 +165,28 @@
 .preview-image-wrap:focus-within::after {
   opacity: 1;
 }
+.preview-video-label {
+  position: absolute;
+  bottom: 1rem;
+  right: 1rem;
+  z-index: 5;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #fff;
+  background: rgba(0,0,0,0.5);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.preview-video-label:hover {
+  background: rgba(0,0,0,0.7);
+}
+.preview-video-label--block {
+  position: static;
+  display: inline-block;
+  margin-top: 0.5rem;
+}
 @media (hover: none) {
   .preview-image-wrap::after {
     opacity: 0.6;

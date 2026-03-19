@@ -33,6 +33,7 @@ export default function DashboardPage() {
   const [publishing, setPublishing] = useState(false);
   const [publishMessage, setPublishMessage] = useState("");
   const [uploadingImage, setUploadingImage] = useState<"hero" | "about" | null>(null);
+  const [uploadingVideo, setUploadingVideo] = useState<"hero" | "about" | null>(null);
   const [imageCacheBust, setImageCacheBust] = useState(0);
 
   const applyUpdate = useCallback((getNewContent: (prev: ContentData) => ContentData) => {
@@ -180,13 +181,57 @@ export default function DashboardPage() {
         setPublishMessage(data.error || "Échec de l'upload");
         return;
       }
-      if (key === "hero") applyUpdate((c) => ({ ...c, hero: { ...c.hero, image: data.path } }));
-      else applyUpdate((c) => ({ ...c, about: { ...c.about, image: data.path } }));
+      if (key === "hero") {
+        applyUpdate((c) => ({
+          ...c,
+          hero: {
+            ...c.hero,
+            image: data.path,
+            ...(data.pathWebp && { imageWebp: data.pathWebp }),
+            ...(data.pathAvif && { imageAvif: data.pathAvif }),
+          },
+        }));
+      } else {
+        applyUpdate((c) => ({
+          ...c,
+          about: {
+            ...c.about,
+            image: data.path,
+            ...(data.pathWebp && { imageWebp: data.pathWebp }),
+            ...(data.pathAvif && { imageAvif: data.pathAvif }),
+          },
+        }));
+      }
       setImageCacheBust(Date.now());
     } catch {
       setPublishMessage("Erreur lors de l'upload");
     } finally {
       setUploadingImage(null);
+    }
+  }
+
+  async function onVideoFileChange(e: React.ChangeEvent<HTMLInputElement>, key: "hero" | "about") {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !content) return;
+    setUploadingVideo(key);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("key", key === "hero" ? "hero-video" : "about-video");
+      const res = await fetch("/api/upload-image", { method: "POST", body: form });
+      const data = await res.json();
+      if (!res.ok) {
+        setPublishMessage(data.error || "Échec de l'upload vidéo");
+        return;
+      }
+      if (key === "hero") applyUpdate((c) => ({ ...c, hero: { ...c.hero, video: data.path } }));
+      else applyUpdate((c) => ({ ...c, about: { ...c.about, video: data.path } }));
+      setImageCacheBust(Date.now());
+    } catch {
+      setPublishMessage("Erreur lors de l'upload vidéo");
+    } finally {
+      setUploadingVideo(null);
     }
   }
 
@@ -222,12 +267,12 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-[var(--cms-bg)]">
       <header className="sticky top-0 z-50 border-b border-[var(--cms-border)] bg-[var(--cms-surface)]">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-          <div className="min-w-0 flex items-center gap-3">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-6 gap-y-3 px-5 py-4 sm:gap-x-8 sm:px-6 sm:py-3">
+          <div className="min-w-0 flex items-center gap-4">
             <h1 className="font-display truncate text-lg font-semibold text-[var(--cms-text)]">
               {session && typeof session === "object" && session.name ? session.name : "Édition du site"}
             </h1>
-            <div className="flex items-center rounded-lg border border-[var(--cms-border)] bg-[var(--cms-bg)] p-0.5">
+            <div className="flex shrink-0 items-center rounded-lg border border-[var(--cms-border)] bg-[var(--cms-bg)] p-0.5">
               <button
                 type="button"
                 onClick={handleUndo}
@@ -254,7 +299,7 @@ export default function DashboardPage() {
               </button>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          <div className="flex shrink-0 flex-wrap items-center gap-3 sm:gap-4">
             {publishMessage && (
               <span className={`text-xs sm:text-sm ${publishMessage.startsWith("Contenu publié") ? "text-[var(--cms-success)]" : "text-[var(--cms-error)]"}`}>
                 {publishMessage.startsWith("Contenu publié") ? "✓ Enregistré" : publishMessage}
@@ -264,7 +309,7 @@ export default function DashboardPage() {
               type="button"
               onClick={handlePublish}
               disabled={publishing}
-              className="rounded-lg bg-white px-4 py-2.5 font-semibold text-black transition-opacity hover:opacity-90 disabled:opacity-50 disabled:pointer-events-none"
+              className="rounded-lg bg-white px-5 py-2.5 font-semibold text-black transition-opacity hover:opacity-90 disabled:opacity-50 disabled:pointer-events-none sm:px-4"
             >
               {publishing ? (
                 <span className="inline-flex items-center gap-2">
@@ -283,7 +328,7 @@ export default function DashboardPage() {
                 href={session.siteUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-white transition-opacity hover:opacity-80"
+                className="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-80"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -298,7 +343,7 @@ export default function DashboardPage() {
                 router.push("/");
                 router.refresh();
               }}
-              className="rounded-lg px-3 py-2 text-sm text-[var(--cms-text-muted)] transition-colors hover:text-[var(--cms-text)]"
+              className="rounded-lg px-3 py-2.5 text-sm text-[var(--cms-text-muted)] transition-colors hover:text-[var(--cms-text)]"
             >
               Déconnexion
             </button>
@@ -308,12 +353,14 @@ export default function DashboardPage() {
 
       <input id="cms-upload-hero" type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="sr-only" onChange={(e) => onImageFileChange(e, "hero")} aria-label="Remplacer l'image hero" />
       <input id="cms-upload-about" type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="sr-only" onChange={(e) => onImageFileChange(e, "about")} aria-label="Remplacer l'image à propos" />
+      <input id="cms-upload-hero-video" type="file" accept="video/mp4,video/webm" className="sr-only" onChange={(e) => onVideoFileChange(e, "hero")} aria-label="Remplacer la vidéo hero" />
+      <input id="cms-upload-about-video" type="file" accept="video/mp4,video/webm" className="sr-only" onChange={(e) => onVideoFileChange(e, "about")} aria-label="Remplacer la vidéo à propos" />
 
-      {uploadingImage && (
+      {(uploadingImage || uploadingVideo) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
           <div className="flex flex-col items-center gap-4 rounded-2xl border border-[var(--cms-border)] bg-[var(--cms-surface)] px-8 py-6 shadow-2xl">
             <div className="h-10 w-10 rounded-full border-2 border-[var(--cms-border)] border-t-white animate-spin" />
-            <p className="text-sm font-medium text-[var(--cms-text)]">Envoi de l’image…</p>
+            <p className="text-sm font-medium text-[var(--cms-text)]">Envoi en cours…</p>
           </div>
         </div>
       )}
