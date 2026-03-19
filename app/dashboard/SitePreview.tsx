@@ -195,7 +195,7 @@ export default function SitePreview({
   const sections: Record<SectionId, React.ReactNode | null> = {
     hero: content.hero ? (
       <header key="hero" className="preview-hero">
-        <div className="preview-hero__bg preview-media-container">
+        <div className="preview-hero__bg">
           {content.hero.video ? (
             <HeroVideo
               className="preview-hero__image"
@@ -229,12 +229,6 @@ export default function SitePreview({
               fetchPriority="high"
             />
           )}
-          <div className="preview-media-overlay">
-            <label htmlFor={UPLOAD_HERO_ID} className="preview-media-btn">Modifier image</label>
-            {content.hero.video && (
-              <label htmlFor={UPLOAD_HERO_VIDEO_ID} className="preview-media-btn">Modifier vidéo</label>
-            )}
-          </div>
         </div>
         <div className="preview-hero__content">
           <input
@@ -253,6 +247,12 @@ export default function SitePreview({
             placeholder="Sous-titre"
             aria-label="Sous-titre hero"
           />
+        </div>
+        <div className="preview-media-bar">
+          <label htmlFor={UPLOAD_HERO_ID} className="preview-media-btn">Modifier image</label>
+          {content.hero.video && (
+            <label htmlFor={UPLOAD_HERO_VIDEO_ID} className="preview-media-btn">Modifier vidéo</label>
+          )}
         </div>
       </header>
     ) : null,
@@ -381,7 +381,7 @@ export default function SitePreview({
     videoLoop: content.videoLoop ? (
       <section key="videoLoop" className="preview-video-loop">
         <div className="preview-video-loop__overlay" />
-        <div className="preview-video-loop__media preview-media-container">
+        <div className="preview-video-loop__media">
           {content.videoLoop.video && (
             <HeroVideo
               className="preview-video-loop__video"
@@ -389,9 +389,6 @@ export default function SitePreview({
               poster=""
             />
           )}
-          <div className="preview-media-overlay">
-            <label htmlFor="cms-upload-videoloop-video" className="preview-media-btn">Modifier vidéo</label>
-          </div>
         </div>
         <input
           className="preview-input preview-video-loop__title"
@@ -400,6 +397,9 @@ export default function SitePreview({
           placeholder="Titre"
           aria-label="Titre vidéo boucle"
         />
+        <div className="preview-media-bar">
+          <label htmlFor="cms-upload-videoloop-video" className="preview-media-btn">Modifier vidéo</label>
+        </div>
       </section>
     ) : null,
     videoPlay: content.videoPlay ? (

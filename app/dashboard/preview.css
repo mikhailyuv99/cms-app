@@ -56,7 +56,7 @@
   min-width: 100%;
   min-height: 100%;
 }
-.preview-hero__content { position: relative; z-index: 1; text-align: center; padding: 2rem; max-width: 42rem; }
+.preview-hero__content { position: relative; z-index: 3; text-align: center; padding: 2rem; max-width: 42rem; }
 .preview-hero__title {
   font-family: 'Outfit', sans-serif;
   font-size: clamp(2.2rem, 6vw, 3.5rem);
@@ -170,7 +170,7 @@
 }
 .preview-video-loop__title {
   position: relative;
-  z-index: 2;
+  z-index: 3;
   font-family: 'Outfit', sans-serif;
   font-size: clamp(1.75rem, 4vw, 2.5rem);
   font-weight: 700;
@@ -207,7 +207,32 @@
   height: 100%;
   object-fit: cover;
 }
-/* Unified media overlay for all editable media (images, videos, posters) */
+/* Bottom bar for sections where text overlays media (hero, videoLoop) */
+.preview-media-bar {
+  position: absolute;
+  bottom: 1.25rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: flex;
+  gap: 0.75rem;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+.preview-hero:hover > .preview-media-bar,
+.preview-video-loop:hover > .preview-media-bar {
+  opacity: 1;
+  pointer-events: auto;
+}
+@media (hover: none) {
+  .preview-media-bar {
+    opacity: 0.8;
+    pointer-events: auto;
+  }
+}
+
+/* Full overlay for sections where media is separate from text (about, videoPlay) */
 .preview-media-overlay {
   position: absolute;
   inset: 0;
