@@ -1,10 +1,22 @@
 "use client";
 
+import { useState } from "react";
 import type { ContentData, SectionId } from "@/lib/content-types";
 import { mergeTheme } from "@/lib/content-types";
 import "./preview.css";
 
 const DEFAULT_SECTION_ORDER: SectionId[] = ["hero", "about", "services", "contact"];
+
+const GRIP_ICON = (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+    <circle cx="9" cy="6" r="1.5" />
+    <circle cx="15" cy="6" r="1.5" />
+    <circle cx="9" cy="12" r="1.5" />
+    <circle cx="15" cy="12" r="1.5" />
+    <circle cx="9" cy="18" r="1.5" />
+    <circle cx="15" cy="18" r="1.5" />
+  </svg>
+);
 
 function imageSrc(url: string, siteUrl?: string, cacheBust?: number): string {
   if (!url) return "";
@@ -28,6 +40,8 @@ interface SitePreviewProps {
   onService: (index: number, field: "title" | "description", value: string) => void;
   onServicesTitle: (value: string) => void;
   onContact: (field: keyof ContentData["contact"], value: string) => void;
+  onSectionReorder: (fromIndex: number, toIndex: number) => void;
+  onServiceCardReorder: (fromIndex: number, toIndex: number) => void;
   imageCacheBust?: number;
   siteUrl?: string;
 }
@@ -39,11 +53,52 @@ export default function SitePreview({
   onService,
   onServicesTitle,
   onContact,
+  onSectionReorder,
+  onServiceCardReorder,
   imageCacheBust,
   siteUrl,
 }: SitePreviewProps) {
   const theme = mergeTheme(content.theme);
   const sectionOrder = content.sectionOrder?.length ? content.sectionOrder : DEFAULT_SECTION_ORDER;
+  const [dragOverSection, setDragOverSection] = useState<number | null>(null);
+  const [dragOverCard, setDragOverCard] = useState<number | null>(null);
+
+  const handleSectionDragStart = (e: React.DragEvent, index: number) => {
+    e.dataTransfer.setData("text/plain", `section:${index}`);
+    e.dataTransfer.effectAllowed = "move";
+  };
+  const handleSectionDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverSection(index);
+  };
+  const handleSectionDrop = (e: React.DragEvent, toIndex: number) => {
+    e.preventDefault();
+    setDragOverSection(null);
+    const raw = e.dataTransfer.getData("text/plain");
+    if (!raw.startsWith("section:")) return;
+    const fromIndex = parseInt(raw.replace("section:", ""), 10);
+    if (Number.isNaN(fromIndex) || fromIndex === toIndex) return;
+    onSectionReorder(fromIndex, toIndex);
+  };
+  const handleCardDragStart = (e: React.DragEvent, index: number) => {
+    e.dataTransfer.setData("text/plain", `card:${index}`);
+    e.dataTransfer.effectAllowed = "move";
+  };
+  const handleCardDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverCard(index);
+  };
+  const handleCardDrop = (e: React.DragEvent, toIndex: number) => {
+    e.preventDefault();
+    setDragOverCard(null);
+    const raw = e.dataTransfer.getData("text/plain");
+    if (!raw.startsWith("card:")) return;
+    const fromIndex = parseInt(raw.replace("card:", ""), 10);
+    if (Number.isNaN(fromIndex) || fromIndex === toIndex) return;
+    onServiceCardReorder(fromIndex, toIndex);
+  };
 
   const sections: Record<SectionId, React.ReactNode> = {
     hero: (
@@ -131,24 +186,41 @@ export default function SitePreview({
         />
         <div className="preview-services__list">
           {content.services.items.map((item, i) => (
-            <div key={i} className="preview-service-card" style={{ background: theme.serviceCardBg }}>
-              <input
-                className="preview-input preview-service-card__title"
-                style={{ color: theme.serviceCardTitle }}
-                value={item.title}
-                onChange={(e) => onService(i, "title", e.target.value)}
-                placeholder="Titre"
-                aria-label={`Service ${i + 1} titre`}
-              />
-              <textarea
-                className="preview-input preview-service-card__description"
-                style={{ color: theme.serviceCardText }}
-                value={item.description}
-                onChange={(e) => onService(i, "description", e.target.value)}
-                placeholder="Description"
-                rows={2}
-                aria-label={`Service ${i + 1} description`}
-              />
+            <div
+              key={i}
+              className={`preview-card-wrap${dragOverCard === i ? " preview-drag-over" : ""}`}
+              onDragOver={(e) => handleCardDragOver(e, i)}
+              onDragLeave={() => setDragOverCard(null)}
+              onDrop={(e) => handleCardDrop(e, i)}
+            >
+              <span
+                className="preview-drag-handle"
+                draggable
+                onDragStart={(e) => handleCardDragStart(e, i)}
+                title="Déplacer la carte"
+                aria-label="Déplacer la carte"
+              >
+                {GRIP_ICON}
+              </span>
+              <div className="preview-service-card" style={{ background: theme.serviceCardBg }}>
+                <input
+                  className="preview-input preview-service-card__title"
+                  style={{ color: theme.serviceCardTitle }}
+                  value={item.title}
+                  onChange={(e) => onService(i, "title", e.target.value)}
+                  placeholder="Titre"
+                  aria-label={`Service ${i + 1} titre`}
+                />
+                <textarea
+                  className="preview-input preview-service-card__description"
+                  style={{ color: theme.serviceCardText }}
+                  value={item.description}
+                  onChange={(e) => onService(i, "description", e.target.value)}
+                  placeholder="Description"
+                  rows={2}
+                  aria-label={`Service ${i + 1} description`}
+                />
+              </div>
             </div>
           ))}
         </div>
@@ -205,7 +277,26 @@ export default function SitePreview({
         rel="stylesheet"
       />
       <main>
-        {sectionOrder.map((id) => sections[id]).filter(Boolean)}
+        {sectionOrder.map((id, index) => (
+          <div
+            key={id}
+            className={`preview-section-wrap${dragOverSection === index ? " preview-drag-over" : ""}`}
+            onDragOver={(e) => handleSectionDragOver(e, index)}
+            onDragLeave={() => setDragOverSection(null)}
+            onDrop={(e) => handleSectionDrop(e, index)}
+          >
+            <span
+              className="preview-drag-handle"
+              draggable
+              onDragStart={(e) => handleSectionDragStart(e, index)}
+              title="Déplacer la section"
+              aria-label="Déplacer la section"
+            >
+              {GRIP_ICON}
+            </span>
+            {sections[id]}
+          </div>
+        ))}
       </main>
     </div>
   );

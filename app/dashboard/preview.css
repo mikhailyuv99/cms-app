@@ -141,3 +141,44 @@
     font-size: 0.75rem;
   }
 }
+
+/* Drag and drop */
+.preview-section-wrap,
+.preview-card-wrap {
+  position: relative;
+}
+.preview-drag-handle {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  color: rgba(255,255,255,0.5);
+  background: rgba(0,0,0,0.35);
+  border-radius: 6px;
+  z-index: 10;
+  transition: color 0.2s, background 0.2s;
+}
+.preview-drag-handle:hover {
+  color: rgba(255,255,255,0.9);
+  background: rgba(0,0,0,0.5);
+}
+.preview-drag-handle:active {
+  cursor: grabbing;
+}
+.preview-card-wrap .preview-drag-handle {
+  top: 0.5rem;
+  right: 0.5rem;
+  width: 1.75rem;
+  height: 1.75rem;
+}
+.preview-section-wrap.preview-drag-over,
+.preview-card-wrap.preview-drag-over {
+  outline: 2px dashed rgba(255,255,255,0.6);
+  outline-offset: 4px;
+  border-radius: 8px;
+}

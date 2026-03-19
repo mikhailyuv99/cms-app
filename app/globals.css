@@ -2,7 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
+@font-face {
+  font-family: 'Questrial';
+  src: url('/fonts/Questrial-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
 
 :root {
   --cms-bg: #0a0a0a;
@@ -17,13 +23,13 @@
 body {
   background: var(--cms-bg);
   color: var(--cms-text);
-  font-family: 'Source Sans 3', system-ui, sans-serif;
+  font-family: 'Questrial', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 .font-display {
-  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-family: 'Questrial', system-ui, sans-serif;
 }
 
 *:focus-visible {

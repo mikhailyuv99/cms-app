@@ -1,11 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import type { ContentData, SectionId } from "@/lib/content-types";
 import SitePreview from "./SitePreview";
 
 const DEFAULT_SECTION_ORDER: SectionId[] = ["hero", "about", "services", "contact"];
+const MAX_HISTORY = 80;
+
+function cloneContent(c: ContentData): ContentData {
+  return JSON.parse(JSON.stringify(c));
+}
 
 function FullScreenLoading({ message }: { message: string }) {
   return (
@@ -22,11 +27,25 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [content, setContent] = useState<ContentData | null>(null);
+  const [history, setHistory] = useState<ContentData[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(0);
   const [sha, setSha] = useState("");
   const [publishing, setPublishing] = useState(false);
   const [publishMessage, setPublishMessage] = useState("");
   const [uploadingImage, setUploadingImage] = useState<"hero" | "about" | null>(null);
   const [imageCacheBust, setImageCacheBust] = useState(0);
+
+  const applyUpdate = useCallback((getNewContent: (prev: ContentData) => ContentData) => {
+    if (!content) return;
+    const newContent = getNewContent(content);
+    setHistory((h) => {
+      const next = h.slice(0, historyIndex + 1);
+      next.push(cloneContent(newContent));
+      return next.length > MAX_HISTORY ? next.slice(-MAX_HISTORY) : next;
+    });
+    setHistoryIndex((i) => Math.min(i + 1, MAX_HISTORY - 1));
+    setContent(newContent);
+  }, [content, historyIndex]);
 
   useEffect(() => {
     fetch("/api/auth/session")
@@ -57,7 +76,10 @@ export default function DashboardPage() {
           setContent(null);
           return;
         }
-        setContent(data.content as ContentData);
+        const dataContent = data.content as ContentData;
+        setContent(dataContent);
+        setHistory([cloneContent(dataContent)]);
+        setHistoryIndex(0);
         setSha(data.sha);
       })
       .catch(() => {
@@ -94,46 +116,53 @@ export default function DashboardPage() {
   }
 
   function updateHero(field: keyof ContentData["hero"], value: string) {
-    if (!content) return;
-    setContent({ ...content, hero: { ...content.hero, [field]: value } });
+    applyUpdate((c) => ({ ...c, hero: { ...c.hero, [field]: value } }));
   }
   function updateAbout(field: keyof ContentData["about"], value: string) {
-    if (!content) return;
-    setContent({ ...content, about: { ...content.about, [field]: value } });
+    applyUpdate((c) => ({ ...c, about: { ...c.about, [field]: value } }));
   }
   function updateService(index: number, field: "title" | "description", value: string) {
-    if (!content) return;
-    const items = [...content.services.items];
-    items[index] = { ...items[index], [field]: value };
-    setContent({ ...content, services: { ...content.services, items } });
+    applyUpdate((c) => {
+      const items = [...c.services.items];
+      items[index] = { ...items[index], [field]: value };
+      return { ...c, services: { ...c.services, items } };
+    });
   }
   function updateContact(field: keyof ContentData["contact"], value: string) {
-    if (!content) return;
-    setContent({ ...content, contact: { ...content.contact, [field]: value } });
+    applyUpdate((c) => ({ ...c, contact: { ...c.contact, [field]: value } }));
   }
 
-  function updateSectionOrder(newOrder: SectionId[]) {
-    if (!content) return;
-    setContent({ ...content, sectionOrder: newOrder });
+  function reorderSection(fromIndex: number, toIndex: number) {
+    if (fromIndex === toIndex) return;
+    applyUpdate((c) => {
+      const order = [...(c.sectionOrder ?? DEFAULT_SECTION_ORDER)];
+      const [item] = order.splice(fromIndex, 1);
+      order.splice(toIndex, 0, item);
+      return { ...c, sectionOrder: order };
+    });
   }
 
-  function moveSection(index: number, direction: "up" | "down") {
-    if (!content) return;
-    const order = content.sectionOrder ?? DEFAULT_SECTION_ORDER;
-    const next = [...order];
-    const j = direction === "up" ? index - 1 : index + 1;
-    if (j < 0 || j >= next.length) return;
-    [next[index], next[j]] = [next[j], next[index]];
-    updateSectionOrder(next);
+  function reorderServiceCard(fromIndex: number, toIndex: number) {
+    if (fromIndex === toIndex) return;
+    applyUpdate((c) => {
+      const items = [...c.services.items];
+      const [item] = items.splice(fromIndex, 1);
+      items.splice(toIndex, 0, item);
+      return { ...c, services: { ...c.services, items } };
+    });
   }
 
-  function moveServiceCard(index: number, direction: "up" | "down") {
-    if (!content) return;
-    const items = [...content.services.items];
-    const j = direction === "up" ? index - 1 : index + 1;
-    if (j < 0 || j >= items.length) return;
-    [items[index], items[j]] = [items[j], items[index]];
-    setContent({ ...content, services: { ...content.services, items } });
+  function handleUndo() {
+    if (historyIndex <= 0 || !content) return;
+    const newIndex = historyIndex - 1;
+    setHistoryIndex(newIndex);
+    setContent(cloneContent(history[newIndex]));
+  }
+  function handleRedo() {
+    if (historyIndex >= history.length - 1 || !content) return;
+    const newIndex = historyIndex + 1;
+    setHistoryIndex(newIndex);
+    setContent(cloneContent(history[newIndex]));
   }
 
   async function onImageFileChange(e: React.ChangeEvent<HTMLInputElement>, key: "hero" | "about") {
@@ -151,8 +180,8 @@ export default function DashboardPage() {
         setPublishMessage(data.error || "Échec de l'upload");
         return;
       }
-      if (key === "hero") setContent({ ...content, hero: { ...content.hero, image: data.path } });
-      else setContent({ ...content, about: { ...content.about, image: data.path } });
+      if (key === "hero") applyUpdate((c) => ({ ...c, hero: { ...c.hero, image: data.path } }));
+      else applyUpdate((c) => ({ ...c, about: { ...c.about, image: data.path } }));
       setImageCacheBust(Date.now());
     } catch {
       setPublishMessage("Erreur lors de l'upload");
@@ -194,15 +223,61 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-[var(--cms-bg)]">
       <header className="sticky top-0 z-50 border-b border-[var(--cms-border)] bg-[var(--cms-surface)]">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-          <div className="min-w-0">
+          <div className="min-w-0 flex items-center gap-3">
             <h1 className="font-display truncate text-lg font-semibold text-[var(--cms-text)]">
               {session && typeof session === "object" && session.name ? session.name : "Édition du site"}
             </h1>
-            <p className="truncate text-xs text-[var(--cms-text-muted)] sm:text-sm">
-              Modifiez le contenu en direct, puis publiez.
-            </p>
+            <div className="flex items-center rounded-lg border border-[var(--cms-border)] bg-[var(--cms-bg)] p-0.5">
+              <button
+                type="button"
+                onClick={handleUndo}
+                disabled={historyIndex <= 0}
+                className="rounded-md p-2 text-[var(--cms-text-muted)] hover:bg-[var(--cms-surface)] hover:text-[var(--cms-text)] disabled:opacity-40 disabled:pointer-events-none"
+                aria-label="Annuler"
+                title="Annuler"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={handleRedo}
+                disabled={historyIndex >= history.length - 1}
+                className="rounded-md p-2 text-[var(--cms-text-muted)] hover:bg-[var(--cms-surface)] hover:text-[var(--cms-text)] disabled:opacity-40 disabled:pointer-events-none"
+                aria-label="Rétablir"
+                title="Rétablir"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" />
+                </svg>
+              </button>
+            </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2 sm:gap-4">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            {publishMessage && (
+              <span className={`text-xs sm:text-sm ${publishMessage.startsWith("Contenu publié") ? "text-[var(--cms-success)]" : "text-[var(--cms-error)]"}`}>
+                {publishMessage.startsWith("Contenu publié") ? "✓ Enregistré" : publishMessage}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={handlePublish}
+              disabled={publishing}
+              className="rounded-lg bg-white px-4 py-2.5 font-semibold text-black transition-opacity hover:opacity-90 disabled:opacity-50 disabled:pointer-events-none"
+            >
+              {publishing ? (
+                <span className="inline-flex items-center gap-2">
+                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  <span className="hidden sm:inline">Enregistrement…</span>
+                </span>
+              ) : (
+                "ENREGISTRER"
+              )}
+            </button>
             {session && typeof session === "object" && session.siteUrl && (
               <a
                 href={session.siteUrl}
@@ -248,114 +323,14 @@ export default function DashboardPage() {
         onHero={updateHero}
         onAbout={updateAbout}
         onService={updateService}
-        onServicesTitle={(v) => setContent({ ...content, services: { ...content.services, title: v } })}
+        onServicesTitle={(v) => applyUpdate((c) => ({ ...c, services: { ...c.services, title: v } }))}
         onContact={updateContact}
+        onSectionReorder={reorderSection}
+        onServiceCardReorder={reorderServiceCard}
         imageCacheBust={imageCacheBust}
         siteUrl={session && typeof session === "object" ? session.siteUrl : undefined}
       />
 
-      <footer className="sticky bottom-0 z-40 border-t border-[var(--cms-border)] bg-[var(--cms-surface)]">
-        <div className="mx-auto max-w-3xl px-4 py-4 sm:px-6">
-          <details className="mb-4 group">
-            <summary className="cursor-pointer text-sm font-medium text-[var(--cms-text-muted)] hover:text-[var(--cms-text)] list-none flex items-center gap-2">
-              <span className="group-open:rotate-90 transition-transform inline-block">▶</span>
-              Ordre des sections
-            </summary>
-            <ul className="mt-2 space-y-1">
-              {(content.sectionOrder ?? DEFAULT_SECTION_ORDER).map((id, i) => (
-                <li key={id} className="flex items-center gap-2 text-sm">
-                  <span className="text-[var(--cms-text-muted)] w-20 shrink-0">
-                    {id === "hero" ? "Hero" : id === "about" ? "À propos" : id === "services" ? "Services" : "Contact"}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => moveSection(i, "up")}
-                    disabled={i === 0}
-                    className="rounded p-1.5 text-[var(--cms-text-muted)] hover:bg-[var(--cms-bg)] hover:text-[var(--cms-text)] disabled:opacity-40 disabled:pointer-events-none"
-                    aria-label="Monter"
-                  >
-                    ↑
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => moveSection(i, "down")}
-                    disabled={i === (content.sectionOrder ?? DEFAULT_SECTION_ORDER).length - 1}
-                    className="rounded p-1.5 text-[var(--cms-text-muted)] hover:bg-[var(--cms-bg)] hover:text-[var(--cms-text)] disabled:opacity-40 disabled:pointer-events-none"
-                    aria-label="Descendre"
-                  >
-                    ↓
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </details>
-          <details className="mb-4 group">
-            <summary className="cursor-pointer text-sm font-medium text-[var(--cms-text-muted)] hover:text-[var(--cms-text)] list-none flex items-center gap-2">
-              <span className="group-open:rotate-90 transition-transform inline-block">▶</span>
-              Ordre des cartes (services)
-            </summary>
-            <ul className="mt-2 space-y-1">
-              {content.services.items.map((item, i) => (
-                <li key={i} className="flex items-center gap-2 text-sm">
-                  <span className="truncate text-[var(--cms-text)] max-w-[180px]">
-                    {item.title || `Carte ${i + 1}`}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => moveServiceCard(i, "up")}
-                    disabled={i === 0}
-                    className="rounded p-1.5 text-[var(--cms-text-muted)] hover:bg-[var(--cms-bg)] hover:text-[var(--cms-text)] disabled:opacity-40 disabled:pointer-events-none"
-                    aria-label="Monter"
-                  >
-                    ↑
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => moveServiceCard(i, "down")}
-                    disabled={i === content.services.items.length - 1}
-                    className="rounded p-1.5 text-[var(--cms-text-muted)] hover:bg-[var(--cms-bg)] hover:text-[var(--cms-text)] disabled:opacity-40 disabled:pointer-events-none"
-                    aria-label="Descendre"
-                  >
-                    ↓
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </details>
-          {publishMessage && (
-            <p
-              className={`mb-3 flex items-center justify-center gap-2 text-sm ${
-                publishMessage.startsWith("Contenu publié") ? "text-[var(--cms-success)]" : "text-[var(--cms-error)]"
-              }`}
-            >
-              {publishMessage.startsWith("Contenu publié") ? (
-                <svg className="h-5 w-5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                </svg>
-              ) : null}
-              {publishMessage}
-            </p>
-          )}
-          <button
-            type="button"
-            onClick={handlePublish}
-            disabled={publishing}
-            className="w-full rounded-xl bg-white px-4 py-3.5 font-semibold text-black transition-opacity hover:opacity-90 focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-[var(--cms-bg)] disabled:opacity-50 disabled:pointer-events-none"
-          >
-            {publishing ? (
-              <span className="inline-flex items-center justify-center gap-2">
-                <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-                Publication…
-              </span>
-            ) : (
-              "Modifications terminées"
-            )}
-          </button>
-        </div>
-      </footer>
     </div>
   );
 }
