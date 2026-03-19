@@ -258,19 +258,30 @@ export default function DashboardPage() {
     }
   }
 
+  function fileToBase64(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        resolve(dataUrl.split(",")[1]);
+      };
+      reader.onerror = () => reject(new Error("Impossible de lire le fichier"));
+      reader.readAsDataURL(file);
+    });
+  }
+
   async function uploadDirectToGitHub(file: File, filePath: string): Promise<string> {
     const credRes = await fetch("/api/upload-credentials");
     if (!credRes.ok) throw new Error("Impossible d'obtenir les identifiants");
     const { token, owner, repo } = await credRes.json();
 
-    const arrayBuf = await file.arrayBuffer();
-    const base64 = btoa(
-      new Uint8Array(arrayBuf).reduce((s, b) => s + String.fromCharCode(b), "")
-    );
+    const base64 = await fileToBase64(file);
+
+    const headers = { Authorization: `Bearer ${token}`, Accept: "application/vnd.github.v3+json" };
 
     const shaRes = await fetch(
       `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`,
-      { headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github.v3+json" } }
+      { headers }
     );
     let sha: string | undefined;
     if (shaRes.ok) {
@@ -282,11 +293,7 @@ export default function DashboardPage() {
       `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`,
       {
         method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/vnd.github.v3+json",
-          "Content-Type": "application/json",
-        },
+        headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify({
           message: `Vidéo ${filePath} mise à jour via CMS`,
           content: base64,
