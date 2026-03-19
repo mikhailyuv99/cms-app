@@ -259,7 +259,7 @@ export default function SitePreview({
     about: content.about ? (
       <section key="about" className="preview-about">
         <div className="preview-about__grid">
-          <div className="preview-about__media preview-media-container">
+          <div className="preview-about__media">
               {content.about.video ? (
                 <video
                   className="preview-about__image"
@@ -295,7 +295,7 @@ export default function SitePreview({
                   decoding="async"
                 />
               )}
-              <div className="preview-media-overlay">
+              <div className="preview-media-bar-inline">
                 <label htmlFor={UPLOAD_ABOUT_ID} className="preview-media-btn">Modifier image</label>
                 {content.about.video && (
                   <label htmlFor={UPLOAD_ABOUT_VIDEO_ID} className="preview-media-btn">Modifier vidéo</label>
@@ -411,7 +411,7 @@ export default function SitePreview({
           placeholder="Titre"
           aria-label="Titre vidéo lecture"
         />
-        <div className="preview-video-play__media preview-media-container">
+        <div className="preview-video-play__media">
           {content.videoPlay.video ? (
             <video
               className="preview-video-play__video"
@@ -426,10 +426,10 @@ export default function SitePreview({
               Aucune vidéo
             </div>
           )}
-          <div className="preview-media-overlay">
-            <label htmlFor="cms-upload-videoplay-video" className="preview-media-btn">Modifier vidéo</label>
-            <label htmlFor="cms-upload-videoplay-poster" className="preview-media-btn">Modifier miniature</label>
-          </div>
+        </div>
+        <div className="preview-media-bar-inline">
+          <label htmlFor="cms-upload-videoplay-video" className="preview-media-btn">Modifier vidéo</label>
+          <label htmlFor="cms-upload-videoplay-poster" className="preview-media-btn">Modifier miniature</label>
         </div>
       </section>
     ) : null,

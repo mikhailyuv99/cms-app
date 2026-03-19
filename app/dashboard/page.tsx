@@ -349,13 +349,13 @@ export default function DashboardPage() {
               {session && typeof session === "object" && session.name ? session.name : "Édition du site"}
             </h1>
             {showPageTabs && (
-              <nav className="flex shrink-0 items-center gap-0.5 rounded-lg border border-[var(--cms-border)] bg-[var(--cms-bg)] p-0.5" aria-label="Pages">
+              <nav className="hidden sm:flex shrink-0 items-center gap-0.5 rounded-lg border border-[var(--cms-border)] bg-[var(--cms-bg)] p-0.5" aria-label="Pages">
                 {pageOrder.map((slug) => (
                   <button
                     key={slug}
                     type="button"
                     onClick={() => setCurrentPageSlug(slug)}
-                    className={`rounded-md px-2 py-1 text-xs font-medium transition-colors sm:px-2.5 sm:text-sm ${
+                    className={`rounded-md px-2.5 py-1 text-sm font-medium transition-colors ${
                       currentPageSlug === slug
                         ? "bg-[var(--cms-surface)] text-[var(--cms-text)] shadow-sm"
                         : "text-[var(--cms-text-muted)] hover:text-[var(--cms-text)]"
@@ -444,6 +444,28 @@ export default function DashboardPage() {
           </div>
         </div>
       </header>
+
+      {showPageTabs && (
+        <nav
+          className="fixed bottom-4 left-4 z-50 flex sm:hidden items-center gap-0.5 rounded-xl border border-[var(--cms-border)] bg-[var(--cms-surface)] p-1 shadow-lg backdrop-blur-sm"
+          aria-label="Pages (mobile)"
+        >
+          {pageOrder.map((slug) => (
+            <button
+              key={slug}
+              type="button"
+              onClick={() => setCurrentPageSlug(slug)}
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                currentPageSlug === slug
+                  ? "bg-white text-black shadow-sm"
+                  : "text-[var(--cms-text-muted)] hover:text-[var(--cms-text)]"
+              }`}
+            >
+              {pageLabel(slug)}
+            </button>
+          ))}
+        </nav>
+      )}
 
       <input id="cms-upload-hero" type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="sr-only" onChange={(e) => onImageFileChange(e, "hero")} aria-label="Remplacer l'image hero" />
       <input id="cms-upload-about" type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="sr-only" onChange={(e) => onImageFileChange(e, "about")} aria-label="Remplacer l'image à propos" />

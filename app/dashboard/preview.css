@@ -232,24 +232,12 @@
   }
 }
 
-/* Full overlay for sections where media is separate from text (about, videoPlay) */
-.preview-media-overlay {
-  position: absolute;
-  inset: 0;
+/* Inline bar below media for about / videoPlay */
+.preview-media-bar-inline {
   display: flex;
-  align-items: center;
   justify-content: center;
   gap: 0.75rem;
-  background: rgba(0, 0, 0, 0.55);
-  opacity: 0;
-  transition: opacity 0.25s ease;
-  z-index: 5;
-  pointer-events: none;
-  border-radius: inherit;
-}
-.preview-media-container:hover > .preview-media-overlay {
-  opacity: 1;
-  pointer-events: auto;
+  margin-top: 0.75rem;
 }
 .preview-media-btn {
   padding: 0.65rem 1.25rem;
@@ -270,12 +258,6 @@
   background: rgba(255, 255, 255, 0.25);
   border-color: rgba(255, 255, 255, 0.55);
   transform: translateY(-1px);
-}
-@media (hover: none) {
-  .preview-media-overlay {
-    opacity: 0.75;
-    pointer-events: auto;
-  }
 }
 
 /* Drag and drop */
