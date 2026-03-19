@@ -2,14 +2,27 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import type { ContentData, SectionId } from "@/lib/content-types";
+import {
+  getEffectiveSectionOrder,
+  getPageOrder,
+  getCurrentPageContent,
+  isMultiPage,
+  type ContentData,
+  type ContentFile,
+  type SectionId,
+} from "@/lib/content-types";
 import SitePreview from "./SitePreview";
 
 const DEFAULT_SECTION_ORDER: SectionId[] = ["hero", "about", "services", "contact"];
 const MAX_HISTORY = 80;
 
-function cloneContent(c: ContentData): ContentData {
+function cloneContent(c: ContentFile): ContentFile {
   return JSON.parse(JSON.stringify(c));
+}
+
+function pageLabel(slug: string): string {
+  if (slug === "index") return "Accueil";
+  return slug.charAt(0).toUpperCase() + slug.slice(1);
 }
 
 function FullScreenLoading({ message }: { message: string }) {
@@ -26,8 +39,9 @@ export default function DashboardPage() {
   const [session, setSession] = useState<{ siteUrl?: string; name?: string } | null | false>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
-  const [content, setContent] = useState<ContentData | null>(null);
-  const [history, setHistory] = useState<ContentData[]>([]);
+  const [content, setContent] = useState<ContentFile | null>(null);
+  const [currentPageSlug, setCurrentPageSlug] = useState<string>("index");
+  const [history, setHistory] = useState<ContentFile[]>([]);
   const [historyIndex, setHistoryIndex] = useState(0);
   const [sha, setSha] = useState("");
   const [publishing, setPublishing] = useState(false);
@@ -36,17 +50,28 @@ export default function DashboardPage() {
   const [uploadingVideo, setUploadingVideo] = useState<"hero" | "about" | null>(null);
   const [imageCacheBust, setImageCacheBust] = useState(0);
 
-  const applyUpdate = useCallback((getNewContent: (prev: ContentData) => ContentData) => {
-    if (!content) return;
-    const newContent = getNewContent(content);
-    setHistory((h) => {
-      const next = h.slice(0, historyIndex + 1);
-      next.push(cloneContent(newContent));
-      return next.length > MAX_HISTORY ? next.slice(-MAX_HISTORY) : next;
-    });
-    setHistoryIndex((i) => Math.min(i + 1, MAX_HISTORY - 1));
-    setContent(newContent);
-  }, [content, historyIndex]);
+  const applyPageUpdate = useCallback(
+    (updater: (page: ContentData) => ContentData) => {
+      if (!content) return;
+      const newContent: ContentFile = isMultiPage(content)
+        ? {
+            ...content,
+            pages: {
+              ...content.pages,
+              [currentPageSlug]: updater(content.pages[currentPageSlug] ?? {}),
+            },
+          }
+        : updater(content);
+      setHistory((h) => {
+        const next = h.slice(0, historyIndex + 1);
+        next.push(cloneContent(newContent));
+        return next.length > MAX_HISTORY ? next.slice(-MAX_HISTORY) : next;
+      });
+      setHistoryIndex((i) => Math.min(i + 1, MAX_HISTORY - 1));
+      setContent(newContent);
+    },
+    [content, currentPageSlug, historyIndex]
+  );
 
   useEffect(() => {
     fetch("/api/auth/session")
@@ -77,11 +102,13 @@ export default function DashboardPage() {
           setContent(null);
           return;
         }
-        const dataContent = data.content as ContentData;
+        const dataContent = data.content as ContentFile;
         setContent(dataContent);
         setHistory([cloneContent(dataContent)]);
         setHistoryIndex(0);
         setSha(data.sha);
+        const order = getPageOrder(dataContent);
+        setCurrentPageSlug(order[0] ?? "index");
       })
       .catch(() => {
         setLoadError("Erreur réseau");
@@ -116,27 +143,28 @@ export default function DashboardPage() {
     }
   }
 
-  function updateHero(field: keyof ContentData["hero"], value: string) {
-    applyUpdate((c) => ({ ...c, hero: { ...c.hero, [field]: value } }));
+  function updateHero(field: keyof NonNullable<ContentData["hero"]>, value: string) {
+    applyPageUpdate((c) => ({ ...c, hero: { ...c.hero, [field]: value } }));
   }
-  function updateAbout(field: keyof ContentData["about"], value: string) {
-    applyUpdate((c) => ({ ...c, about: { ...c.about, [field]: value } }));
+  function updateAbout(field: keyof NonNullable<ContentData["about"]>, value: string) {
+    applyPageUpdate((c) => ({ ...c, about: { ...c.about, [field]: value } }));
   }
   function updateService(index: number, field: "title" | "description", value: string) {
-    applyUpdate((c) => {
-      const items = [...c.services.items];
+    applyPageUpdate((c) => {
+      const services = c.services ?? { title: "", items: [] };
+      const items = [...services.items];
       items[index] = { ...items[index], [field]: value };
-      return { ...c, services: { ...c.services, items } };
+      return { ...c, services: { ...services, items } };
     });
   }
-  function updateContact(field: keyof ContentData["contact"], value: string) {
-    applyUpdate((c) => ({ ...c, contact: { ...c.contact, [field]: value } }));
+  function updateContact(field: keyof NonNullable<ContentData["contact"]>, value: string) {
+    applyPageUpdate((c) => ({ ...c, contact: { ...c.contact, [field]: value } }));
   }
 
   function reorderSection(fromIndex: number, toIndex: number) {
     if (fromIndex === toIndex) return;
-    applyUpdate((c) => {
-      const order = [...(c.sectionOrder ?? DEFAULT_SECTION_ORDER)];
+    applyPageUpdate((c) => {
+      const order = [...getEffectiveSectionOrder(c)];
       const [item] = order.splice(fromIndex, 1);
       order.splice(toIndex, 0, item);
       return { ...c, sectionOrder: order };
@@ -145,25 +173,34 @@ export default function DashboardPage() {
 
   function reorderServiceCard(fromIndex: number, toIndex: number) {
     if (fromIndex === toIndex) return;
-    applyUpdate((c) => {
-      const items = [...c.services.items];
+    applyPageUpdate((c) => {
+      const services = c.services ?? { title: "", items: [] };
+      const items = [...services.items];
       const [item] = items.splice(fromIndex, 1);
       items.splice(toIndex, 0, item);
-      return { ...c, services: { ...c.services, items } };
+      return { ...c, services: { ...services, items } };
     });
   }
 
   function handleUndo() {
     if (historyIndex <= 0 || !content) return;
     const newIndex = historyIndex - 1;
+    const newContent = cloneContent(history[newIndex]);
     setHistoryIndex(newIndex);
-    setContent(cloneContent(history[newIndex]));
+    setContent(newContent);
+    if (isMultiPage(newContent) && !getPageOrder(newContent).includes(currentPageSlug)) {
+      setCurrentPageSlug(getPageOrder(newContent)[0] ?? "index");
+    }
   }
   function handleRedo() {
     if (historyIndex >= history.length - 1 || !content) return;
     const newIndex = historyIndex + 1;
+    const newContent = cloneContent(history[newIndex]);
     setHistoryIndex(newIndex);
-    setContent(cloneContent(history[newIndex]));
+    setContent(newContent);
+    if (isMultiPage(newContent) && !getPageOrder(newContent).includes(currentPageSlug)) {
+      setCurrentPageSlug(getPageOrder(newContent)[0] ?? "index");
+    }
   }
 
   async function onImageFileChange(e: React.ChangeEvent<HTMLInputElement>, key: "hero" | "about") {
@@ -182,7 +219,7 @@ export default function DashboardPage() {
         return;
       }
       if (key === "hero") {
-        applyUpdate((c) => ({
+        applyPageUpdate((c) => ({
           ...c,
           hero: {
             ...c.hero,
@@ -192,7 +229,7 @@ export default function DashboardPage() {
           },
         }));
       } else {
-        applyUpdate((c) => ({
+        applyPageUpdate((c) => ({
           ...c,
           about: {
             ...c.about,
@@ -225,8 +262,8 @@ export default function DashboardPage() {
         setPublishMessage(data.error || "Échec de l'upload vidéo");
         return;
       }
-      if (key === "hero") applyUpdate((c) => ({ ...c, hero: { ...c.hero, video: data.path } }));
-      else applyUpdate((c) => ({ ...c, about: { ...c.about, video: data.path } }));
+      if (key === "hero") applyPageUpdate((c) => ({ ...c, hero: { ...c.hero, video: data.path } }));
+      else applyPageUpdate((c) => ({ ...c, about: { ...c.about, video: data.path } }));
       setImageCacheBust(Date.now());
     } catch {
       setPublishMessage("Erreur lors de l'upload vidéo");
@@ -264,24 +301,46 @@ export default function DashboardPage() {
 
   if (!content) return null;
 
+  const pageOrder = getPageOrder(content);
+  const pageContent = getCurrentPageContent(content, currentPageSlug);
+  const showPageTabs = isMultiPage(content) && pageOrder.length > 1;
+
   return (
     <div className="min-h-screen bg-[var(--cms-bg)]">
       <header className="sticky top-0 z-50 border-b border-[var(--cms-border)] bg-[var(--cms-surface)]">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-6 gap-y-3 px-5 py-4 sm:gap-x-8 sm:px-6 sm:py-3">
-          <div className="min-w-0 flex items-center gap-4">
-            <h1 className="font-display truncate text-lg font-semibold text-[var(--cms-text)]">
+        <div className="mx-auto flex max-w-7xl flex-nowrap items-center justify-between gap-2 px-3 py-2 sm:gap-3 sm:px-4 sm:py-2">
+          <div className="flex min-w-0 shrink items-center gap-2 sm:gap-3">
+            <h1 className="font-display truncate text-base font-semibold text-[var(--cms-text)] sm:text-lg">
               {session && typeof session === "object" && session.name ? session.name : "Édition du site"}
             </h1>
-            <div className="flex shrink-0 items-center rounded-lg border border-[var(--cms-border)] bg-[var(--cms-bg)] p-0.5">
+            {showPageTabs && (
+              <nav className="flex shrink-0 items-center gap-0.5 rounded-lg border border-[var(--cms-border)] bg-[var(--cms-bg)] p-0.5" aria-label="Pages">
+                {pageOrder.map((slug) => (
+                  <button
+                    key={slug}
+                    type="button"
+                    onClick={() => setCurrentPageSlug(slug)}
+                    className={`rounded-md px-2 py-1 text-xs font-medium transition-colors sm:px-2.5 sm:text-sm ${
+                      currentPageSlug === slug
+                        ? "bg-[var(--cms-surface)] text-[var(--cms-text)] shadow-sm"
+                        : "text-[var(--cms-text-muted)] hover:text-[var(--cms-text)]"
+                    }`}
+                  >
+                    {pageLabel(slug)}
+                  </button>
+                ))}
+              </nav>
+            )}
+            <div className="flex shrink-0 items-center rounded-md border border-[var(--cms-border)] bg-[var(--cms-bg)] p-0.5">
               <button
                 type="button"
                 onClick={handleUndo}
                 disabled={historyIndex <= 0}
-                className="rounded-md p-2 text-[var(--cms-text-muted)] hover:bg-[var(--cms-surface)] hover:text-[var(--cms-text)] disabled:opacity-40 disabled:pointer-events-none"
+                className="rounded p-1.5 text-[var(--cms-text-muted)] hover:bg-[var(--cms-surface)] hover:text-[var(--cms-text)] disabled:opacity-40 disabled:pointer-events-none sm:p-2"
                 aria-label="Annuler"
                 title="Annuler"
               >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="h-3.5 w-3.5 sm:h-4 sm:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
                 </svg>
               </button>
@@ -289,19 +348,19 @@ export default function DashboardPage() {
                 type="button"
                 onClick={handleRedo}
                 disabled={historyIndex >= history.length - 1}
-                className="rounded-md p-2 text-[var(--cms-text-muted)] hover:bg-[var(--cms-surface)] hover:text-[var(--cms-text)] disabled:opacity-40 disabled:pointer-events-none"
+                className="rounded p-1.5 text-[var(--cms-text-muted)] hover:bg-[var(--cms-surface)] hover:text-[var(--cms-text)] disabled:opacity-40 disabled:pointer-events-none sm:p-2"
                 aria-label="Rétablir"
                 title="Rétablir"
               >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="h-3.5 w-3.5 sm:h-4 sm:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" />
                 </svg>
               </button>
             </div>
           </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-3 sm:gap-4">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             {publishMessage && (
-              <span className={`text-xs sm:text-sm ${publishMessage.startsWith("Contenu publié") ? "text-[var(--cms-success)]" : "text-[var(--cms-error)]"}`}>
+              <span className={`hidden text-xs sm:inline-block sm:text-sm ${publishMessage.startsWith("Contenu publié") ? "text-[var(--cms-success)]" : "text-[var(--cms-error)]"}`}>
                 {publishMessage.startsWith("Contenu publié") ? "✓ Enregistré" : publishMessage}
               </span>
             )}
@@ -309,11 +368,11 @@ export default function DashboardPage() {
               type="button"
               onClick={handlePublish}
               disabled={publishing}
-              className="rounded-lg bg-white px-5 py-2.5 font-semibold text-black transition-opacity hover:opacity-90 disabled:opacity-50 disabled:pointer-events-none sm:px-4"
+              className="rounded-md bg-white px-3 py-1.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 disabled:opacity-50 disabled:pointer-events-none sm:rounded-lg sm:px-4 sm:py-2"
             >
               {publishing ? (
-                <span className="inline-flex items-center gap-2">
-                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                <span className="inline-flex items-center gap-1.5">
+                  <svg className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
@@ -328,12 +387,12 @@ export default function DashboardPage() {
                 href={session.siteUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-80"
+                className="inline-flex items-center justify-center rounded-md p-1.5 text-white transition-opacity hover:opacity-80 sm:rounded-lg sm:p-2"
+                title="Voir le site"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                 </svg>
-                <span className="hidden sm:inline">Voir le site</span>
               </a>
             )}
             <button
@@ -343,7 +402,7 @@ export default function DashboardPage() {
                 router.push("/");
                 router.refresh();
               }}
-              className="rounded-lg px-3 py-2.5 text-sm text-[var(--cms-text-muted)] transition-colors hover:text-[var(--cms-text)]"
+              className="rounded-md px-2 py-1.5 text-xs text-[var(--cms-text-muted)] transition-colors hover:text-[var(--cms-text)] sm:rounded-lg sm:px-3 sm:py-2 sm:text-sm"
             >
               Déconnexion
             </button>
@@ -367,11 +426,11 @@ export default function DashboardPage() {
 
       <div className="preview-viewport">
         <SitePreview
-          content={content}
+          content={pageContent}
           onHero={updateHero}
           onAbout={updateAbout}
           onService={updateService}
-          onServicesTitle={(v) => applyUpdate((c) => ({ ...c, services: { ...c.services, title: v } }))}
+          onServicesTitle={(v) => applyPageUpdate((c) => ({ ...c, services: { ...c.services, title: v } }))}
           onContact={updateContact}
           onSectionReorder={reorderSection}
           onServiceCardReorder={reorderServiceCard}

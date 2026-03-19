@@ -2,10 +2,8 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { ContentData, SectionId } from "@/lib/content-types";
-import { mergeTheme } from "@/lib/content-types";
+import { mergeTheme, getEffectiveSectionOrder } from "@/lib/content-types";
 import "./preview.css";
-
-const DEFAULT_SECTION_ORDER: SectionId[] = ["hero", "about", "services", "contact"];
 
 const GRIP_ICON = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
@@ -44,6 +42,40 @@ const UPLOAD_ABOUT_ID = "cms-upload-about";
 const UPLOAD_HERO_VIDEO_ID = "cms-upload-hero-video";
 const UPLOAD_ABOUT_VIDEO_ID = "cms-upload-about-video";
 
+function HeroVideo({
+  src,
+  poster,
+  className,
+}: {
+  src: string;
+  poster: string;
+  className?: string;
+}) {
+  const ref = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !src) return;
+    const play = () => {
+      el.play().catch(() => {});
+    };
+    el.addEventListener("loadeddata", play);
+    if (el.readyState >= 2) play();
+    return () => el.removeEventListener("loadeddata", play);
+  }, [src]);
+  return (
+    <video
+      ref={ref}
+      className={className}
+      poster={poster}
+      src={src}
+      muted
+      loop
+      playsInline
+      autoPlay
+    />
+  );
+}
+
 interface SitePreviewProps {
   content: ContentData;
   onHero: (field: keyof ContentData["hero"], value: string) => void;
@@ -70,7 +102,7 @@ export default function SitePreview({
   siteUrl,
 }: SitePreviewProps) {
   const theme = mergeTheme(content.theme);
-  const sectionOrder = content.sectionOrder?.length ? content.sectionOrder : DEFAULT_SECTION_ORDER;
+  const sectionOrder = getEffectiveSectionOrder(content);
   const [dragOverSection, setDragOverSection] = useState<number | null>(null);
   const [dragOverCard, setDragOverCard] = useState<number | null>(null);
   const [draggingSection, setDraggingSection] = useState<number | null>(null);
@@ -156,8 +188,8 @@ export default function SitePreview({
     startPointerDrag("card", index);
   };
 
-  const sections: Record<SectionId, React.ReactNode> = {
-    hero: (
+  const sections: Record<SectionId, React.ReactNode | null> = {
+    hero: content.hero ? (
       <header key="hero" className="preview-hero">
         <div className="preview-hero__bg">
           <label
@@ -166,14 +198,10 @@ export default function SitePreview({
             style={{ position: "absolute", inset: 0, cursor: "pointer", margin: 0 }}
           >
             {content.hero.video ? (
-              <video
+              <HeroVideo
                 className="preview-hero__image"
                 poster={imageSrc(content.hero.image, siteUrl, imageCacheBust)}
                 src={imageSrc(content.hero.video, siteUrl, imageCacheBust)}
-                muted
-                loop
-                playsInline
-                autoPlay
               />
             ) : content.hero.imageAvif || content.hero.imageWebp ? (
               <picture>
@@ -204,11 +232,11 @@ export default function SitePreview({
             )}
           </label>
           <label
-            htmlFor={UPLOAD_HERO_VIDEO_ID}
+            htmlFor={content.hero.video ? UPLOAD_HERO_VIDEO_ID : UPLOAD_HERO_ID}
             className="preview-video-label"
-            title="Remplacer la vidéo"
+            title={content.hero.video ? "Remplacer la vidéo" : "Remplacer l'image"}
           >
-            Vidéo
+            {content.hero.video ? "Vidéo" : "Image"}
           </label>
         </div>
         <div className="preview-hero__content">
@@ -230,8 +258,8 @@ export default function SitePreview({
           />
         </div>
       </header>
-    ),
-    about: (
+    ) : null,
+    about: content.about ? (
       <section key="about" className="preview-about">
         <div className="preview-about__grid">
           <div className="preview-about__media">
@@ -276,8 +304,12 @@ export default function SitePreview({
                 />
               )}
             </label>
-            <label htmlFor={UPLOAD_ABOUT_VIDEO_ID} className="preview-video-label preview-video-label--block" title="Remplacer la vidéo">
-              Vidéo
+            <label
+              htmlFor={content.about.video ? UPLOAD_ABOUT_VIDEO_ID : UPLOAD_ABOUT_ID}
+              className="preview-video-label preview-video-label--block"
+              title={content.about.video ? "Remplacer la vidéo" : "Remplacer l'image"}
+            >
+              {content.about.video ? "Vidéo" : "Image"}
             </label>
           </div>
           <div className="preview-about__text">
@@ -301,8 +333,8 @@ export default function SitePreview({
           </div>
         </div>
       </section>
-    ),
-    services: (
+    ) : null,
+    services: content.services ? (
       <section key="services" className="preview-services" style={{ background: theme.servicesBg }}>
         <input
           className="preview-input preview-services__title"
@@ -355,8 +387,8 @@ export default function SitePreview({
           ))}
         </div>
       </section>
-    ),
-    contact: (
+    ) : null,
+    contact: content.contact ? (
       <section key="contact" className="preview-contact">
         <input
           className="preview-input preview-contact__title"
@@ -397,7 +429,7 @@ export default function SitePreview({
           aria-label="Email contact"
         />
       </section>
-    ),
+    ) : null,
   };
 
   return (
@@ -407,28 +439,30 @@ export default function SitePreview({
         rel="stylesheet"
       />
       <main>
-        {sectionOrder.map((id, index) => (
-          <div
-            key={id}
-            className={`preview-section-wrap${dragOverSection === index ? " preview-drag-over" : ""}${draggingSection === index ? " preview-dragging" : ""}`}
-            data-section-index={index}
-          >
-            <span
-              className="preview-drag-handle"
-              role="button"
-              tabIndex={0}
-              onPointerDown={(e) => handleSectionPointerDown(e, index)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") e.preventDefault();
-              }}
-              title="Déplacer la section"
-              aria-label="Déplacer la section"
+        {sectionOrder.map((id, index) =>
+          sections[id] ? (
+            <div
+              key={id}
+              className={`preview-section-wrap${dragOverSection === index ? " preview-drag-over" : ""}${draggingSection === index ? " preview-dragging" : ""}`}
+              data-section-index={index}
             >
-              {GRIP_ICON}
-            </span>
-            {sections[id]}
-          </div>
-        ))}
+              <span
+                className="preview-drag-handle"
+                role="button"
+                tabIndex={0}
+                onPointerDown={(e) => handleSectionPointerDown(e, index)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") e.preventDefault();
+                }}
+                title="Déplacer la section"
+                aria-label="Déplacer la section"
+              >
+                {GRIP_ICON}
+              </span>
+              {sections[id]}
+            </div>
+          ) : null
+        )}
       </main>
     </div>
   );

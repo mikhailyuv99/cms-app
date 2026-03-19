@@ -33,7 +33,7 @@ export const DEFAULT_THEME: Required<ThemeColors> = {
 export type SectionId = "hero" | "about" | "services" | "contact";
 
 export interface ContentData {
-  hero: {
+  hero?: {
     title: string;
     subtitle: string;
     image: string;
@@ -41,7 +41,7 @@ export interface ContentData {
     imageAvif?: string;
     video?: string;
   };
-  about: {
+  about?: {
     title: string;
     text: string;
     image: string;
@@ -49,11 +49,11 @@ export interface ContentData {
     imageAvif?: string;
     video?: string;
   };
-  services: {
+  services?: {
     title: string;
     items: Array<{ title: string; description: string }>;
   };
-  contact: {
+  contact?: {
     title: string;
     text: string;
     email: string;
@@ -62,6 +62,46 @@ export interface ContentData {
   theme?: ThemeColors;
   /** Ordre d’affichage des sections. Par défaut: hero, about, services, contact */
   sectionOrder?: SectionId[];
+}
+
+export const ALL_SECTION_IDS: SectionId[] = ["hero", "about", "services", "contact"];
+
+/** Contenu multi-pages : chaque clé est un slug de page (ex. "index", "about"). */
+export interface ContentDataMultiPage {
+  pages: Record<string, ContentData>;
+  /** Ordre des pages pour la navigation. Si absent, ordre des clés de `pages`. */
+  pageOrder?: string[];
+}
+
+/** Contenu tel que stocké dans content.json : une page unique (ContentData) ou multi-pages. */
+export type ContentFile = ContentData | ContentDataMultiPage;
+
+export function isMultiPage(content: ContentFile): content is ContentDataMultiPage {
+  return (
+    typeof content === "object" &&
+    content !== null &&
+    "pages" in content &&
+    typeof (content as ContentDataMultiPage).pages === "object" &&
+    (content as ContentDataMultiPage).pages !== null &&
+    Object.keys((content as ContentDataMultiPage).pages).length > 0
+  );
+}
+
+export function getPageOrder(content: ContentFile): string[] {
+  if (!isMultiPage(content)) return ["index"];
+  const order = content.pageOrder?.length ? content.pageOrder : Object.keys(content.pages);
+  return order.filter((slug) => slug in content.pages);
+}
+
+/** Retourne le contenu de la page courante (pour édition / prévisualisation). */
+export function getCurrentPageContent(content: ContentFile, pageSlug: string): ContentData {
+  if (!isMultiPage(content)) return content;
+  return content.pages[pageSlug] ?? {};
+}
+
+export function getEffectiveSectionOrder(content: ContentData): SectionId[] {
+  const order = content.sectionOrder?.length ? content.sectionOrder : ALL_SECTION_IDS;
+  return order.filter((id) => content[id] != null);
 }
 
 export function mergeTheme(theme?: ThemeColors): Required<ThemeColors> {

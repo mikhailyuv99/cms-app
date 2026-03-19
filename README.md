@@ -45,6 +45,6 @@ Ouvrir **http://localhost:3000**. Le client entre le **mot de passe de son proje
 - **CMS_SESSION_SECRET** : chaîne aléatoire pour signer les cookies de session (en production, ne pas utiliser la valeur par défaut).
 - **Netlify** : chaque site client est déployé via Netlify à partir de son dépôt (déploiement à chaque push).
 
-## Structure du contenu
+## Structure du contenu (adaptable)
 
-Le fichier `content.json` dans chaque dépôt suit le schéma du mockup (hero, about, services, contact). Voir `mockup-site/content.json`.
+Le fichier `content.json` à la racine du dépôt peut contenir **tout ou partie** des sections : hero, about, services, contact. Le CMS détecte les sections présentes et n’édite que celles-là ; l’ordre d’affichage est donné par `sectionOrder` (ou ordre par défaut). Voir `mockup-site/content.json` et **`PROMPT-CMS-COMPATIBLE.md`** (à la racine du repo) pour le prompt à donner à une IA qui développe un site client compatible.
