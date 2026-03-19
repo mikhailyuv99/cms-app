@@ -253,6 +253,8 @@ export default function DashboardPage() {
     }
   }
 
+  const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100 MB — hard GitHub limit
+
   function fileToBase64(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -266,40 +268,84 @@ export default function DashboardPage() {
   }
 
   async function uploadDirectToGitHub(file: File, filePath: string): Promise<string> {
+    if (file.size > MAX_VIDEO_SIZE) {
+      throw new Error(
+        `Le fichier fait ${(file.size / 1024 / 1024).toFixed(0)} Mo. La limite GitHub est de 100 Mo. Compressez votre vidéo.`
+      );
+    }
+
     const credRes = await fetch("/api/upload-credentials");
     if (!credRes.ok) throw new Error("Impossible d'obtenir les identifiants");
     const { token, owner, repo } = await credRes.json();
 
     const base64 = await fileToBase64(file);
+    const h: Record<string, string> = {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github.v3+json",
+      "Content-Type": "application/json",
+    };
+    const api = `https://api.github.com/repos/${owner}/${repo}`;
 
-    const headers = { Authorization: `Bearer ${token}`, Accept: "application/vnd.github.v3+json" };
+    // Detect default branch
+    const repoRes = await fetch(api, { headers: h });
+    if (!repoRes.ok) throw new Error("Impossible d'accéder au dépôt");
+    const { default_branch: branch } = await repoRes.json();
 
-    const shaRes = await fetch(
-      `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`,
-      { headers }
-    );
-    let sha: string | undefined;
-    if (shaRes.ok) {
-      const existing = await shaRes.json();
-      sha = existing.sha;
+    // 1 — Create blob (Git Data API: handles large binary reliably)
+    const blobRes = await fetch(`${api}/git/blobs`, {
+      method: "POST",
+      headers: h,
+      body: JSON.stringify({ content: base64, encoding: "base64" }),
+    });
+    if (!blobRes.ok) {
+      const err = await blobRes.json().catch(() => ({}));
+      throw new Error((err as { message?: string }).message || `Erreur blob (${blobRes.status})`);
     }
+    const { sha: blobSha } = await blobRes.json();
 
-    const putRes = await fetch(
-      `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`,
-      {
-        method: "PUT",
-        headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: `Vidéo ${filePath} mise à jour via CMS`,
-          content: base64,
-          ...(sha ? { sha } : {}),
-        }),
-      }
-    );
-    if (!putRes.ok) {
-      const err = await putRes.json().catch(() => ({}));
-      throw new Error((err as { message?: string }).message || `GitHub API error ${putRes.status}`);
-    }
+    // 2 — Get current branch HEAD
+    const refRes = await fetch(`${api}/git/ref/heads/${branch}`, { headers: h });
+    if (!refRes.ok) throw new Error("Impossible de récupérer la branche");
+    const headSha: string = (await refRes.json()).object.sha;
+
+    // 3 — Get base tree
+    const commitRes = await fetch(`${api}/git/commits/${headSha}`, { headers: h });
+    if (!commitRes.ok) throw new Error("Impossible de récupérer le commit");
+    const baseTree: string = (await commitRes.json()).tree.sha;
+
+    // 4 — Create tree with the new file
+    const treeRes = await fetch(`${api}/git/trees`, {
+      method: "POST",
+      headers: h,
+      body: JSON.stringify({
+        base_tree: baseTree,
+        tree: [{ path: filePath, mode: "100644", type: "blob", sha: blobSha }],
+      }),
+    });
+    if (!treeRes.ok) throw new Error("Impossible de créer l'arbre");
+    const newTree: string = (await treeRes.json()).sha;
+
+    // 5 — Create commit
+    const cRes = await fetch(`${api}/git/commits`, {
+      method: "POST",
+      headers: h,
+      body: JSON.stringify({
+        message: `Vidéo ${filePath} mise à jour via CMS`,
+        tree: newTree,
+        parents: [headSha],
+      }),
+    });
+    if (!cRes.ok) throw new Error("Impossible de créer le commit");
+    const newCommit: string = (await cRes.json()).sha;
+
+    // 6 — Update branch ref
+    const updRes = await fetch(`${api}/git/refs/heads/${branch}`, {
+      method: "PATCH",
+      headers: h,
+      body: JSON.stringify({ sha: newCommit }),
+    });
+    if (!updRes.ok) throw new Error("Impossible de mettre à jour la branche");
+
     return filePath;
   }
 
@@ -343,8 +389,8 @@ export default function DashboardPage() {
       const data = await res.json();
       applyPageUpdate((c) => ({ ...c, videoPlay: { ...(c.videoPlay ?? { title: "", video: "" }), poster: data.path } }));
       setImageCacheBust(Date.now());
-    } catch {
-      setPublishMessage("Erreur lors de l'upload");
+    } catch (err) {
+      setPublishMessage(`Erreur upload miniature: ${err instanceof Error ? err.message : "réseau"}`);
     } finally {
       setUploadingImage(null);
     }
