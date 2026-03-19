@@ -6,15 +6,18 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "hash-password": "node scripts/hash-password.js"
   },
   "dependencies": {
+    "bcryptjs": "^2.4.3",
     "next": "^14.2.0",
+    "octokit": "^3.1.0",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "octokit": "^3.1.0"
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20.0.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",

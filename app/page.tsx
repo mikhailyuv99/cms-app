@@ -37,11 +37,11 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-sm rounded-xl bg-zinc-900 border border-zinc-800 p-6 shadow-xl">
         <h1 className="text-xl font-semibold text-zinc-100 mb-1">CMS</h1>
-        <p className="text-sm text-zinc-400 mb-6">Édition de site — accès client</p>
+        <p className="text-sm text-zinc-400 mb-6">Entrez le mot de passe de votre projet pour accéder à l’édition de votre site.</p>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label htmlFor="password" className="block text-sm font-medium text-zinc-300 mb-1">
-              Mot de passe
+              Mot de passe du projet
             </label>
             <input
               id="password"

@@ -5,17 +5,18 @@ import { parseRepoUrl, putFile } from "@/lib/github";
 const CONTENT_PATH = "content.json";
 
 export async function POST(request: NextRequest) {
-  if (!getSession()) {
+  const session = getSession();
+  if (!session) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
   }
-  const body = await request.json();
-  const { repo: repoInput, content, sha } = body;
-  if (!repoInput || content === undefined || !sha) {
-    return NextResponse.json({ error: "Paramètres repo, content et sha requis" }, { status: 400 });
-  }
-  const parsed = parseRepoUrl(repoInput);
+  const parsed = parseRepoUrl(session.repo);
   if (!parsed) {
-    return NextResponse.json({ error: "URL du repo GitHub invalide" }, { status: 400 });
+    return NextResponse.json({ error: "Repo du projet invalide" }, { status: 400 });
+  }
+  const body = await request.json();
+  const { content, sha } = body;
+  if (content === undefined || !sha) {
+    return NextResponse.json({ error: "Paramètres content et sha requis" }, { status: 400 });
   }
   const contentStr = typeof content === "string" ? content : JSON.stringify(content, null, 2);
   const ok = await putFile(
