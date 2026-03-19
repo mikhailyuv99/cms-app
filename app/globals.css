@@ -37,10 +37,24 @@ body {
   outline-offset: 2px;
 }
 
+/* Login password: single white outline only (no double border+outline) */
+#password:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 0;
+  border-color: var(--cms-border);
+}
+
 .scrollbar-hide {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
+}
+
+/* Smooth scroll on iOS when programmatic scroll is used */
+@media (pointer: coarse) {
+  .preview-root {
+    -webkit-overflow-scrolling: touch;
+  }
 }

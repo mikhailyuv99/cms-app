@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { ContentData, SectionId } from "@/lib/content-types";
 import { mergeTheme } from "@/lib/content-types";
 import "./preview.css";
@@ -62,10 +62,49 @@ export default function SitePreview({
   const sectionOrder = content.sectionOrder?.length ? content.sectionOrder : DEFAULT_SECTION_ORDER;
   const [dragOverSection, setDragOverSection] = useState<number | null>(null);
   const [dragOverCard, setDragOverCard] = useState<number | null>(null);
+  const [draggingSection, setDraggingSection] = useState<number | null>(null);
+  const [draggingCard, setDraggingCard] = useState<number | null>(null);
+  const scrollRAF = useRef<number | null>(null);
+  const isDragging = draggingSection !== null || draggingCard !== null;
+
+  useEffect(() => {
+    if (!isDragging) return;
+    const ZONE = 120;
+    const handleDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      const y = e.clientY;
+      const h = typeof window !== "undefined" ? window.innerHeight : 800;
+      let dy = 0;
+      if (y < ZONE) {
+        const t = 1 - y / ZONE;
+        dy = -Math.round(8 + t * 16);
+      } else if (y > h - ZONE) {
+        const t = (y - (h - ZONE)) / ZONE;
+        dy = Math.round(8 + t * 16);
+      }
+      if (dy !== 0 && typeof window !== "undefined") {
+        if (scrollRAF.current != null) cancelAnimationFrame(scrollRAF.current);
+        scrollRAF.current = requestAnimationFrame(() => {
+          window.scrollBy({ top: dy!, behavior: "auto" });
+          scrollRAF.current = null;
+        });
+      }
+    };
+    document.addEventListener("dragover", handleDragOver, false);
+    return () => {
+      document.removeEventListener("dragover", handleDragOver, false);
+      if (scrollRAF.current != null) cancelAnimationFrame(scrollRAF.current);
+    };
+  }, [isDragging]);
 
   const handleSectionDragStart = (e: React.DragEvent, index: number) => {
     e.dataTransfer.setData("text/plain", `section:${index}`);
     e.dataTransfer.effectAllowed = "move";
+    setDraggingSection(index);
+  };
+  const handleSectionDragEnd = () => {
+    setDraggingSection(null);
+    setDragOverSection(null);
   };
   const handleSectionDragOver = (e: React.DragEvent, index: number) => {
     e.preventDefault();
@@ -75,6 +114,7 @@ export default function SitePreview({
   const handleSectionDrop = (e: React.DragEvent, toIndex: number) => {
     e.preventDefault();
     setDragOverSection(null);
+    setDraggingSection(null);
     const raw = e.dataTransfer.getData("text/plain");
     if (!raw.startsWith("section:")) return;
     const fromIndex = parseInt(raw.replace("section:", ""), 10);
@@ -84,6 +124,11 @@ export default function SitePreview({
   const handleCardDragStart = (e: React.DragEvent, index: number) => {
     e.dataTransfer.setData("text/plain", `card:${index}`);
     e.dataTransfer.effectAllowed = "move";
+    setDraggingCard(index);
+  };
+  const handleCardDragEnd = () => {
+    setDraggingCard(null);
+    setDragOverCard(null);
   };
   const handleCardDragOver = (e: React.DragEvent, index: number) => {
     e.preventDefault();
@@ -93,6 +138,7 @@ export default function SitePreview({
   const handleCardDrop = (e: React.DragEvent, toIndex: number) => {
     e.preventDefault();
     setDragOverCard(null);
+    setDraggingCard(null);
     const raw = e.dataTransfer.getData("text/plain");
     if (!raw.startsWith("card:")) return;
     const fromIndex = parseInt(raw.replace("card:", ""), 10);
@@ -188,7 +234,7 @@ export default function SitePreview({
           {content.services.items.map((item, i) => (
             <div
               key={i}
-              className={`preview-card-wrap${dragOverCard === i ? " preview-drag-over" : ""}`}
+              className={`preview-card-wrap${dragOverCard === i ? " preview-drag-over" : ""}${draggingCard === i ? " preview-dragging" : ""}`}
               onDragOver={(e) => handleCardDragOver(e, i)}
               onDragLeave={() => setDragOverCard(null)}
               onDrop={(e) => handleCardDrop(e, i)}
@@ -197,6 +243,7 @@ export default function SitePreview({
                 className="preview-drag-handle"
                 draggable
                 onDragStart={(e) => handleCardDragStart(e, i)}
+                onDragEnd={handleCardDragEnd}
                 title="Déplacer la carte"
                 aria-label="Déplacer la carte"
               >
@@ -280,7 +327,7 @@ export default function SitePreview({
         {sectionOrder.map((id, index) => (
           <div
             key={id}
-            className={`preview-section-wrap${dragOverSection === index ? " preview-drag-over" : ""}`}
+            className={`preview-section-wrap${dragOverSection === index ? " preview-drag-over" : ""}${draggingSection === index ? " preview-dragging" : ""}`}
             onDragOver={(e) => handleSectionDragOver(e, index)}
             onDragLeave={() => setDragOverSection(null)}
             onDrop={(e) => handleSectionDrop(e, index)}
@@ -289,6 +336,7 @@ export default function SitePreview({
               className="preview-drag-handle"
               draggable
               onDragStart={(e) => handleSectionDragStart(e, index)}
+              onDragEnd={handleSectionDragEnd}
               title="Déplacer la section"
               aria-label="Déplacer la section"
             >

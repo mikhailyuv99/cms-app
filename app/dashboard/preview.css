@@ -162,6 +162,9 @@
   border-radius: 6px;
   z-index: 10;
   transition: color 0.2s, background 0.2s;
+  touch-action: none; /* allow drag to start on touch where supported */
+  -webkit-user-select: none;
+  user-select: none;
 }
 .preview-drag-handle:hover {
   color: rgba(255,255,255,0.9);
@@ -181,4 +184,18 @@
   outline: 2px dashed rgba(255,255,255,0.6);
   outline-offset: 4px;
   border-radius: 8px;
+}
+
+/* Lift animation when dragging */
+.preview-section-wrap.preview-dragging,
+.preview-card-wrap.preview-dragging {
+  transform: translateY(-8px) scale(1.02);
+  box-shadow: 0 16px 48px rgba(0,0,0,0.55);
+  opacity: 0.96;
+  transition: none;
+  z-index: 20;
+}
+.preview-card-wrap.preview-dragging {
+  transform: translateY(-6px) scale(1.02);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.5);
 }
