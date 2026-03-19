@@ -256,28 +256,54 @@ export default function DashboardPage() {
     }
   }
 
-  async function onVideoFileChange(e: React.ChangeEvent<HTMLInputElement>, key: "hero" | "about") {
+  async function onVideoFileChange(e: React.ChangeEvent<HTMLInputElement>, key: string) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file || !content) return;
-    setUploadingVideo(key);
+    setUploadingVideo(key as "hero" | "about");
     try {
       const form = new FormData();
       form.append("file", file);
-      form.append("key", key === "hero" ? "hero-video" : "about-video");
+      form.append("key", key);
       const res = await fetch("/api/upload-image", { method: "POST", body: form });
       const data = await res.json();
       if (!res.ok) {
         setPublishMessage(data.error || "Échec de l'upload vidéo");
         return;
       }
-      if (key === "hero") applyPageUpdate((c) => ({ ...c, hero: { ...c.hero, video: data.path } as NonNullable<ContentData["hero"]> }));
-      else applyPageUpdate((c) => ({ ...c, about: { ...c.about, video: data.path } as NonNullable<ContentData["about"]> }));
+      if (key === "hero-video") applyPageUpdate((c) => ({ ...c, hero: { ...c.hero, video: data.path } as NonNullable<ContentData["hero"]> }));
+      else if (key === "about-video") applyPageUpdate((c) => ({ ...c, about: { ...c.about, video: data.path } as NonNullable<ContentData["about"]> }));
+      else if (key === "videoLoop-video") applyPageUpdate((c) => ({ ...c, videoLoop: { ...(c.videoLoop ?? { title: "", video: "" }), video: data.path } }));
+      else if (key === "videoPlay-video") applyPageUpdate((c) => ({ ...c, videoPlay: { ...(c.videoPlay ?? { title: "", video: "" }), video: data.path } }));
       setImageCacheBust(Date.now());
     } catch {
       setPublishMessage("Erreur lors de l'upload vidéo");
     } finally {
       setUploadingVideo(null);
+    }
+  }
+
+  async function onPosterFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !content) return;
+    setUploadingImage("about");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("key", "videoPlay-poster");
+      const res = await fetch("/api/upload-image", { method: "POST", body: form });
+      const data = await res.json();
+      if (!res.ok) {
+        setPublishMessage(data.error || "Échec de l'upload");
+        return;
+      }
+      applyPageUpdate((c) => ({ ...c, videoPlay: { ...(c.videoPlay ?? { title: "", video: "" }), poster: data.path } }));
+      setImageCacheBust(Date.now());
+    } catch {
+      setPublishMessage("Erreur lors de l'upload");
+    } finally {
+      setUploadingImage(null);
     }
   }
 
@@ -421,8 +447,11 @@ export default function DashboardPage() {
 
       <input id="cms-upload-hero" type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="sr-only" onChange={(e) => onImageFileChange(e, "hero")} aria-label="Remplacer l'image hero" />
       <input id="cms-upload-about" type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="sr-only" onChange={(e) => onImageFileChange(e, "about")} aria-label="Remplacer l'image à propos" />
-      <input id="cms-upload-hero-video" type="file" accept="video/mp4,video/webm" className="sr-only" onChange={(e) => onVideoFileChange(e, "hero")} aria-label="Remplacer la vidéo hero" />
-      <input id="cms-upload-about-video" type="file" accept="video/mp4,video/webm" className="sr-only" onChange={(e) => onVideoFileChange(e, "about")} aria-label="Remplacer la vidéo à propos" />
+      <input id="cms-upload-hero-video" type="file" accept="video/mp4,video/webm" className="sr-only" onChange={(e) => onVideoFileChange(e, "hero-video")} aria-label="Remplacer la vidéo hero" />
+      <input id="cms-upload-about-video" type="file" accept="video/mp4,video/webm" className="sr-only" onChange={(e) => onVideoFileChange(e, "about-video")} aria-label="Remplacer la vidéo à propos" />
+      <input id="cms-upload-videoloop-video" type="file" accept="video/mp4,video/webm" className="sr-only" onChange={(e) => onVideoFileChange(e, "videoLoop-video")} aria-label="Remplacer la vidéo boucle" />
+      <input id="cms-upload-videoplay-video" type="file" accept="video/mp4,video/webm" className="sr-only" onChange={(e) => onVideoFileChange(e, "videoPlay-video")} aria-label="Remplacer la vidéo lecture" />
+      <input id="cms-upload-videoplay-poster" type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="sr-only" onChange={onPosterFileChange} aria-label="Remplacer le poster" />
 
       {(uploadingImage || uploadingVideo) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">

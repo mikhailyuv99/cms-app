@@ -411,6 +411,9 @@ export default function SitePreview({
           placeholder="Titre"
           aria-label="Titre vidéo boucle"
         />
+        <label htmlFor="cms-upload-videoloop-video" className="preview-video-label" title="Remplacer la vidéo">
+          Vidéo
+        </label>
       </section>
     ) : null,
     videoPlay: content.videoPlay ? (
@@ -423,7 +426,7 @@ export default function SitePreview({
           aria-label="Titre vidéo lecture"
         />
         <div className="preview-video-play__media">
-          {content.videoPlay.video && (
+          {content.videoPlay.video ? (
             <video
               className="preview-video-play__video"
               src={imageSrc(content.videoPlay.video, siteUrl, imageCacheBust)}
@@ -432,7 +435,19 @@ export default function SitePreview({
               playsInline
               preload="metadata"
             />
+          ) : (
+            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#666" }}>
+              Aucune vidéo
+            </div>
           )}
+        </div>
+        <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem", justifyContent: "center" }}>
+          <label htmlFor="cms-upload-videoplay-video" className="preview-video-label preview-video-label--block" title="Remplacer la vidéo">
+            Vidéo
+          </label>
+          <label htmlFor="cms-upload-videoplay-poster" className="preview-video-label preview-video-label--block" title="Remplacer le poster">
+            Poster
+          </label>
         </div>
       </section>
     ) : null,

@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { parseRepoUrl, getFileSha, putFileBinary } from "@/lib/github";
 
-const IMAGE_KEYS = ["hero", "about"] as const;
-const VIDEO_KEYS = ["hero-video", "about-video"] as const;
+const IMAGE_KEYS = ["hero", "about", "videoPlay-poster"] as const;
+const VIDEO_KEYS = ["hero-video", "about-video", "videoLoop-video", "videoPlay-video"] as const;
 const ALLOWED_KEYS = [...IMAGE_KEYS, ...VIDEO_KEYS] as const;
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5 MB
 const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50 MB
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
   const key = formData.get("key") as string | null;
 
   if (!file || !key || !ALLOWED_KEYS.includes(key as (typeof ALLOWED_KEYS)[number])) {
-    return NextResponse.json({ error: "Fichier et key requis (hero, about, hero-video, about-video)" }, { status: 400 });
+    return NextResponse.json({ error: "Fichier et key requis" }, { status: 400 });
   }
 
   const isVideo = VIDEO_KEYS.includes(key as (typeof VIDEO_KEYS)[number]);
