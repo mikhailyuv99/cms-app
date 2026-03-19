@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import type { ContentData } from "@/lib/content-types";
+import type { ContentData, SectionId } from "@/lib/content-types";
 import SitePreview from "./SitePreview";
+
+const DEFAULT_SECTION_ORDER: SectionId[] = ["hero", "about", "services", "contact"];
 
 function FullScreenLoading({ message }: { message: string }) {
   return (
@@ -108,6 +110,30 @@ export default function DashboardPage() {
   function updateContact(field: keyof ContentData["contact"], value: string) {
     if (!content) return;
     setContent({ ...content, contact: { ...content.contact, [field]: value } });
+  }
+
+  function updateSectionOrder(newOrder: SectionId[]) {
+    if (!content) return;
+    setContent({ ...content, sectionOrder: newOrder });
+  }
+
+  function moveSection(index: number, direction: "up" | "down") {
+    if (!content) return;
+    const order = content.sectionOrder ?? DEFAULT_SECTION_ORDER;
+    const next = [...order];
+    const j = direction === "up" ? index - 1 : index + 1;
+    if (j < 0 || j >= next.length) return;
+    [next[index], next[j]] = [next[j], next[index]];
+    updateSectionOrder(next);
+  }
+
+  function moveServiceCard(index: number, direction: "up" | "down") {
+    if (!content) return;
+    const items = [...content.services.items];
+    const j = direction === "up" ? index - 1 : index + 1;
+    if (j < 0 || j >= items.length) return;
+    [items[index], items[j]] = [items[j], items[index]];
+    setContent({ ...content, services: { ...content.services, items } });
   }
 
   async function onImageFileChange(e: React.ChangeEvent<HTMLInputElement>, key: "hero" | "about") {
@@ -230,6 +256,72 @@ export default function DashboardPage() {
 
       <footer className="sticky bottom-0 z-40 border-t border-[var(--cms-border)] bg-[var(--cms-surface)]">
         <div className="mx-auto max-w-3xl px-4 py-4 sm:px-6">
+          <details className="mb-4 group">
+            <summary className="cursor-pointer text-sm font-medium text-[var(--cms-text-muted)] hover:text-[var(--cms-text)] list-none flex items-center gap-2">
+              <span className="group-open:rotate-90 transition-transform inline-block">▶</span>
+              Ordre des sections
+            </summary>
+            <ul className="mt-2 space-y-1">
+              {(content.sectionOrder ?? DEFAULT_SECTION_ORDER).map((id, i) => (
+                <li key={id} className="flex items-center gap-2 text-sm">
+                  <span className="text-[var(--cms-text-muted)] w-20 shrink-0">
+                    {id === "hero" ? "Hero" : id === "about" ? "À propos" : id === "services" ? "Services" : "Contact"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => moveSection(i, "up")}
+                    disabled={i === 0}
+                    className="rounded p-1.5 text-[var(--cms-text-muted)] hover:bg-[var(--cms-bg)] hover:text-[var(--cms-text)] disabled:opacity-40 disabled:pointer-events-none"
+                    aria-label="Monter"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveSection(i, "down")}
+                    disabled={i === (content.sectionOrder ?? DEFAULT_SECTION_ORDER).length - 1}
+                    className="rounded p-1.5 text-[var(--cms-text-muted)] hover:bg-[var(--cms-bg)] hover:text-[var(--cms-text)] disabled:opacity-40 disabled:pointer-events-none"
+                    aria-label="Descendre"
+                  >
+                    ↓
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </details>
+          <details className="mb-4 group">
+            <summary className="cursor-pointer text-sm font-medium text-[var(--cms-text-muted)] hover:text-[var(--cms-text)] list-none flex items-center gap-2">
+              <span className="group-open:rotate-90 transition-transform inline-block">▶</span>
+              Ordre des cartes (services)
+            </summary>
+            <ul className="mt-2 space-y-1">
+              {content.services.items.map((item, i) => (
+                <li key={i} className="flex items-center gap-2 text-sm">
+                  <span className="truncate text-[var(--cms-text)] max-w-[180px]">
+                    {item.title || `Carte ${i + 1}`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => moveServiceCard(i, "up")}
+                    disabled={i === 0}
+                    className="rounded p-1.5 text-[var(--cms-text-muted)] hover:bg-[var(--cms-bg)] hover:text-[var(--cms-text)] disabled:opacity-40 disabled:pointer-events-none"
+                    aria-label="Monter"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveServiceCard(i, "down")}
+                    disabled={i === content.services.items.length - 1}
+                    className="rounded p-1.5 text-[var(--cms-text-muted)] hover:bg-[var(--cms-bg)] hover:text-[var(--cms-text)] disabled:opacity-40 disabled:pointer-events-none"
+                    aria-label="Descendre"
+                  >
+                    ↓
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </details>
           {publishMessage && (
             <p
               className={`mb-3 flex items-center justify-center gap-2 text-sm ${
