@@ -195,36 +195,21 @@ export default function SitePreview({
   const sections: Record<SectionId, React.ReactNode | null> = {
     hero: content.hero ? (
       <header key="hero" className="preview-hero">
-        <div className="preview-hero__bg">
-          <label
-            htmlFor={UPLOAD_HERO_ID}
-            className="preview-image-wrap"
-            style={{ position: "absolute", inset: 0, cursor: "pointer", margin: 0 }}
-          >
-            {content.hero.video ? (
-              <HeroVideo
-                className="preview-hero__image"
-                poster={imageSrc(content.hero.image, siteUrl, imageCacheBust)}
-                src={imageSrc(content.hero.video, siteUrl, imageCacheBust)}
-              />
-            ) : content.hero.imageAvif || content.hero.imageWebp ? (
-              <picture>
-                {content.hero.imageAvif && (
-                  <source type="image/avif" src={imageSrc(content.hero.imageAvif, siteUrl, imageCacheBust)} />
-                )}
-                {content.hero.imageWebp && (
-                  <source type="image/webp" src={imageSrc(content.hero.imageWebp, siteUrl, imageCacheBust)} />
-                )}
-                <img
-                  className="preview-hero__image"
-                  src={imageSrc(content.hero.image, siteUrl, imageCacheBust)}
-                  alt=""
-                  loading="eager"
-                  decoding="async"
-                  fetchPriority="high"
-                />
-              </picture>
-            ) : (
+        <div className="preview-hero__bg preview-media-container">
+          {content.hero.video ? (
+            <HeroVideo
+              className="preview-hero__image"
+              poster={imageSrc(content.hero.image, siteUrl, imageCacheBust)}
+              src={imageSrc(content.hero.video, siteUrl, imageCacheBust)}
+            />
+          ) : content.hero.imageAvif || content.hero.imageWebp ? (
+            <picture>
+              {content.hero.imageAvif && (
+                <source type="image/avif" src={imageSrc(content.hero.imageAvif, siteUrl, imageCacheBust)} />
+              )}
+              {content.hero.imageWebp && (
+                <source type="image/webp" src={imageSrc(content.hero.imageWebp, siteUrl, imageCacheBust)} />
+              )}
               <img
                 className="preview-hero__image"
                 src={imageSrc(content.hero.image, siteUrl, imageCacheBust)}
@@ -233,15 +218,23 @@ export default function SitePreview({
                 decoding="async"
                 fetchPriority="high"
               />
+            </picture>
+          ) : (
+            <img
+              className="preview-hero__image"
+              src={imageSrc(content.hero.image, siteUrl, imageCacheBust)}
+              alt=""
+              loading="eager"
+              decoding="async"
+              fetchPriority="high"
+            />
+          )}
+          <div className="preview-media-overlay">
+            <label htmlFor={UPLOAD_HERO_ID} className="preview-media-btn">Modifier image</label>
+            {content.hero.video && (
+              <label htmlFor={UPLOAD_HERO_VIDEO_ID} className="preview-media-btn">Modifier vidéo</label>
             )}
-          </label>
-          <label
-            htmlFor={content.hero.video ? UPLOAD_HERO_VIDEO_ID : UPLOAD_HERO_ID}
-            className="preview-video-label"
-            title={content.hero.video ? "Remplacer la vidéo" : "Remplacer l'image"}
-          >
-            {content.hero.video ? "Vidéo" : "Image"}
-          </label>
+          </div>
         </div>
         <div className="preview-hero__content">
           <input
@@ -266,12 +259,7 @@ export default function SitePreview({
     about: content.about ? (
       <section key="about" className="preview-about">
         <div className="preview-about__grid">
-          <div className="preview-about__media">
-            <label
-              htmlFor={UPLOAD_ABOUT_ID}
-              className="preview-image-wrap"
-              style={{ cursor: "pointer", margin: 0, display: "block", position: "relative" }}
-            >
+          <div className="preview-about__media preview-media-container">
               {content.about.video ? (
                 <video
                   className="preview-about__image"
@@ -307,14 +295,12 @@ export default function SitePreview({
                   decoding="async"
                 />
               )}
-            </label>
-            <label
-              htmlFor={content.about.video ? UPLOAD_ABOUT_VIDEO_ID : UPLOAD_ABOUT_ID}
-              className="preview-video-label preview-video-label--block"
-              title={content.about.video ? "Remplacer la vidéo" : "Remplacer l'image"}
-            >
-              {content.about.video ? "Vidéo" : "Image"}
-            </label>
+              <div className="preview-media-overlay">
+                <label htmlFor={UPLOAD_ABOUT_ID} className="preview-media-btn">Modifier image</label>
+                {content.about.video && (
+                  <label htmlFor={UPLOAD_ABOUT_VIDEO_ID} className="preview-media-btn">Modifier vidéo</label>
+                )}
+              </div>
           </div>
           <div className="preview-about__text">
             <input
@@ -395,7 +381,7 @@ export default function SitePreview({
     videoLoop: content.videoLoop ? (
       <section key="videoLoop" className="preview-video-loop">
         <div className="preview-video-loop__overlay" />
-        <div className="preview-video-loop__media">
+        <div className="preview-video-loop__media preview-media-container">
           {content.videoLoop.video && (
             <HeroVideo
               className="preview-video-loop__video"
@@ -403,6 +389,9 @@ export default function SitePreview({
               poster=""
             />
           )}
+          <div className="preview-media-overlay">
+            <label htmlFor="cms-upload-videoloop-video" className="preview-media-btn">Modifier vidéo</label>
+          </div>
         </div>
         <input
           className="preview-input preview-video-loop__title"
@@ -411,9 +400,6 @@ export default function SitePreview({
           placeholder="Titre"
           aria-label="Titre vidéo boucle"
         />
-        <label htmlFor="cms-upload-videoloop-video" className="preview-video-label" title="Remplacer la vidéo">
-          Vidéo
-        </label>
       </section>
     ) : null,
     videoPlay: content.videoPlay ? (
@@ -425,7 +411,7 @@ export default function SitePreview({
           placeholder="Titre"
           aria-label="Titre vidéo lecture"
         />
-        <div className="preview-video-play__media">
+        <div className="preview-video-play__media preview-media-container">
           {content.videoPlay.video ? (
             <video
               className="preview-video-play__video"
@@ -440,14 +426,10 @@ export default function SitePreview({
               Aucune vidéo
             </div>
           )}
-        </div>
-        <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem", justifyContent: "center" }}>
-          <label htmlFor="cms-upload-videoplay-video" className="preview-video-label preview-video-label--block" title="Remplacer la vidéo">
-            Vidéo
-          </label>
-          <label htmlFor="cms-upload-videoplay-poster" className="preview-video-label preview-video-label--block" title="Remplacer le poster">
-            Poster
-          </label>
+          <div className="preview-media-overlay">
+            <label htmlFor="cms-upload-videoplay-video" className="preview-media-btn">Modifier vidéo</label>
+            <label htmlFor="cms-upload-videoplay-poster" className="preview-media-btn">Modifier miniature</label>
+          </div>
         </div>
       </section>
     ) : null,

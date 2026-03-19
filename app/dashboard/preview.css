@@ -71,7 +71,8 @@
 .preview-about__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3rem; align-items: center; }
 @media (max-width: 768px) { .preview-about__grid { grid-template-columns: 1fr; } }
 .preview-about__media {
-  min-height: 0; /* allow grid cell to size to image on mobile */
+  position: relative;
+  min-height: 0;
   overflow: visible;
 }
 .preview-about__image {
@@ -206,57 +207,52 @@
   height: 100%;
   object-fit: cover;
 }
-.preview-image-wrap {
+/* Unified media overlay for all editable media (images, videos, posters) */
+.preview-media-container {
   position: relative;
-  cursor: pointer;
-  touch-action: manipulation; /* better tap on mobile */
-  -webkit-tap-highlight-color: transparent;
 }
-.preview-image-wrap::after {
-  content: 'Changer l\'image';
+.preview-media-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(0,0,0,0.4);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
-  font-size: 0.875rem;
-  font-weight: 500;
-  border-radius: inherit;
+  gap: 0.75rem;
+  background: rgba(0, 0, 0, 0.55);
   opacity: 0;
-  transition: opacity 0.2s ease;
-}
-.preview-image-wrap:hover::after,
-.preview-image-wrap:focus-within::after {
-  opacity: 1;
-}
-.preview-video-label {
-  position: absolute;
-  bottom: 1rem;
-  right: 1rem;
+  transition: opacity 0.25s ease;
   z-index: 5;
-  padding: 0.4rem 0.75rem;
-  font-size: 0.75rem;
-  font-weight: 500;
+  pointer-events: none;
+  border-radius: inherit;
+}
+.preview-media-container:hover > .preview-media-overlay {
+  opacity: 1;
+  pointer-events: auto;
+}
+.preview-media-btn {
+  padding: 0.65rem 1.25rem;
+  font-size: 0.85rem;
+  font-weight: 600;
   color: #fff;
-  background: rgba(0,0,0,0.5);
-  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1.5px solid rgba(255, 255, 255, 0.35);
+  border-radius: 8px;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background 0.2s, border-color 0.2s, transform 0.15s;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  white-space: nowrap;
+  user-select: none;
 }
-.preview-video-label:hover {
-  background: rgba(0,0,0,0.7);
-}
-.preview-video-label--block {
-  position: static;
-  display: inline-block;
-  margin-top: 0.5rem;
+.preview-media-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.55);
+  transform: translateY(-1px);
 }
 @media (hover: none) {
-  .preview-image-wrap::after {
-    opacity: 0.6;
-    font-size: 0.75rem;
+  .preview-media-overlay {
+    opacity: 0.75;
+    pointer-events: auto;
   }
 }
 
