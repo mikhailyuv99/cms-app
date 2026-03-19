@@ -208,9 +208,6 @@
   object-fit: cover;
 }
 /* Unified media overlay for all editable media (images, videos, posters) */
-.preview-media-container {
-  position: relative;
-}
 .preview-media-overlay {
   position: absolute;
   inset: 0;
