@@ -127,6 +127,14 @@ interface SitePreviewProps {
   onServiceCardReorder: (fromIndex: number, toIndex: number) => void;
   imageCacheBust?: number;
   siteUrl?: string;
+  pageOrder?: string[];
+  currentPageSlug?: string;
+  onPageChange?: (slug: string) => void;
+}
+
+function pageLabel(slug: string): string {
+  if (slug === "index") return "Accueil";
+  return slug.charAt(0).toUpperCase() + slug.slice(1).replace(/-/g, " ");
 }
 
 export default function SitePreview({
@@ -142,7 +150,11 @@ export default function SitePreview({
   onServiceCardReorder,
   imageCacheBust,
   siteUrl,
+  pageOrder,
+  currentPageSlug,
+  onPageChange,
 }: SitePreviewProps) {
+  const showNav = pageOrder && pageOrder.length > 1 && onPageChange;
   const theme = mergeTheme(content.theme);
   const sectionOrder = getEffectiveSectionOrder(content);
   const [dragOverSection, setDragOverSection] = useState<number | null>(null);
@@ -233,7 +245,8 @@ export default function SitePreview({
   const sections: Record<SectionId, React.ReactNode | null> = {
     hero: content.hero ? (
       <header key="hero" className="preview-hero">
-        <div className="preview-hero__bg">
+        <div className="preview-hero__bg" />
+        <div className="preview-hero__media">
           {content.hero.video ? (
             <HeroVideo
               className="preview-hero__image"
@@ -520,6 +533,20 @@ export default function SitePreview({
         href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700&family=Outfit:wght@600;700&display=swap"
         rel="stylesheet"
       />
+      {showNav && (
+        <nav className="preview-site-nav">
+          {pageOrder.map((slug) => (
+            <button
+              key={slug}
+              type="button"
+              className={`preview-site-nav__link${currentPageSlug === slug ? " active" : ""}`}
+              onClick={() => onPageChange(slug)}
+            >
+              {pageLabel(slug)}
+            </button>
+          ))}
+        </nav>
+      )}
       <main>
         {sectionOrder.map((id, index) =>
           sections[id] ? (
