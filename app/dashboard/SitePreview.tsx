@@ -3,12 +3,20 @@
 import type { ContentData } from "@/lib/content-types";
 import "./preview.css";
 
-function imageSrc(url: string, cacheBust?: number): string {
+function imageSrc(url: string, siteUrl?: string, cacheBust?: number): string {
   if (!url) return "";
   if (url.startsWith("http")) return url;
-  const base = `/api/image?path=${encodeURIComponent(url)}`;
+  const path = url.startsWith("/") ? url.slice(1) : url;
+  if (siteUrl && !cacheBust) {
+    const base = siteUrl.replace(/\/$/, "");
+    return `${base}/${path}`;
+  }
+  const base = `/api/image?path=${encodeURIComponent(path)}`;
   return cacheBust ? `${base}&t=${cacheBust}` : base;
 }
+
+const UPLOAD_HERO_ID = "cms-upload-hero";
+const UPLOAD_ABOUT_ID = "cms-upload-about";
 
 interface SitePreviewProps {
   content: ContentData;
@@ -17,9 +25,8 @@ interface SitePreviewProps {
   onService: (index: number, field: "title" | "description", value: string) => void;
   onServicesTitle: (value: string) => void;
   onContact: (field: keyof ContentData["contact"], value: string) => void;
-  onImageUpload: (key: "hero" | "about") => void;
-  imageInputRef: React.RefObject<HTMLInputElement | null>;
   imageCacheBust?: number;
+  siteUrl?: string;
 }
 
 export default function SitePreview({
@@ -29,9 +36,8 @@ export default function SitePreview({
   onService,
   onServicesTitle,
   onContact,
-  onImageUpload,
-  imageInputRef,
   imageCacheBust,
+  siteUrl,
 }: SitePreviewProps) {
   return (
     <div className="preview-root">
@@ -42,20 +48,17 @@ export default function SitePreview({
       <main>
         <header className="preview-hero">
           <div className="preview-hero__bg">
-            <div
+            <label
+              htmlFor={UPLOAD_HERO_ID}
               className="preview-image-wrap"
-              style={{ position: "absolute", inset: 0 }}
-              onClick={() => onImageUpload("hero")}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => e.key === "Enter" && onImageUpload("hero")}
+              style={{ position: "absolute", inset: 0, cursor: "pointer", margin: 0 }}
             >
               <img
                 className="preview-hero__image"
-                src={imageSrc(content.hero.image, imageCacheBust)}
+                src={imageSrc(content.hero.image, siteUrl, imageCacheBust)}
                 alt=""
               />
-            </div>
+            </label>
           </div>
           <div className="preview-hero__content">
             <input
@@ -78,19 +81,17 @@ export default function SitePreview({
         <section className="preview-about">
           <div className="preview-about__grid">
             <div className="preview-about__media">
-              <div
+              <label
+                htmlFor={UPLOAD_ABOUT_ID}
                 className="preview-image-wrap"
-                onClick={() => onImageUpload("about")}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => e.key === "Enter" && onImageUpload("about")}
+                style={{ cursor: "pointer", margin: 0, display: "block" }}
               >
                 <img
                   className="preview-about__image"
-                  src={imageSrc(content.about.image, imageCacheBust)}
+                  src={imageSrc(content.about.image, siteUrl, imageCacheBust)}
                   alt=""
                 />
-              </div>
+              </label>
             </div>
             <div className="preview-about__text">
               <input

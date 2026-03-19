@@ -1,9 +1,18 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import type { ContentData } from "@/lib/content-types";
 import SitePreview from "./SitePreview";
+
+function FullScreenLoading({ message }: { message: string }) {
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 bg-[var(--cms-bg)]">
+      <div className="h-10 w-10 rounded-full border-2 border-[var(--cms-border)] border-t-white animate-spin" />
+      <p className="text-sm text-[var(--cms-text-muted)]">{message}</p>
+    </div>
+  );
+}
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -16,7 +25,6 @@ export default function DashboardPage() {
   const [publishMessage, setPublishMessage] = useState("");
   const [uploadingImage, setUploadingImage] = useState<"hero" | "about" | null>(null);
   const [imageCacheBust, setImageCacheBust] = useState(0);
-  const imageInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetch("/api/auth/session")
@@ -102,18 +110,10 @@ export default function DashboardPage() {
     setContent({ ...content, contact: { ...content.contact, [field]: value } });
   }
 
-  function handleImageUpload(key: "hero" | "about") {
-    if (!imageInputRef.current) return;
-    setUploadingImage(key);
-    imageInputRef.current.setAttribute("data-key", key);
-    imageInputRef.current.click();
-  }
-
-  async function onImageFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const key = e.target.getAttribute("data-key") as "hero" | "about" | null;
+  async function onImageFileChange(e: React.ChangeEvent<HTMLInputElement>, key: "hero" | "about") {
     const file = e.target.files?.[0];
     e.target.value = "";
-    if (!key || !file || !content) return;
+    if (!file || !content) return;
     setUploadingImage(key);
     try {
       const form = new FormData();
@@ -136,104 +136,134 @@ export default function DashboardPage() {
   }
 
   if (session === null) {
+    return <FullScreenLoading message="Vérification de la session…" />;
+  }
+
+  if (session !== false && loading) {
+    return <FullScreenLoading message="Chargement de votre projet…" />;
+  }
+
+  if (loadError) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-zinc-950">
-        <p className="text-zinc-400">Chargement…</p>
+      <div className="min-h-screen bg-[var(--cms-bg)] flex items-center justify-center p-4">
+        <div className="rounded-2xl border border-[var(--cms-border)] bg-[var(--cms-surface)] p-8 text-center max-w-lg">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--cms-error)]/10 text-[var(--cms-error)]">
+            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h2 className="font-display text-xl font-semibold text-[var(--cms-text)]">Impossible de charger le contenu</h2>
+          <p className="mt-2 text-sm text-[var(--cms-text-muted)]">{loadError}</p>
+          <p className="mt-4 text-xs text-[var(--cms-text-muted)]">
+            Vérifiez que le dépôt contient un fichier <code className="rounded bg-[var(--cms-bg)] px-1.5 py-0.5">content.json</code> à la racine.
+          </p>
+        </div>
       </div>
     );
   }
 
+  if (!content) return null;
+
   return (
-    <div className="min-h-screen bg-zinc-950">
-      <div className="sticky top-0 z-50 flex flex-wrap items-center justify-between gap-4 px-4 py-3 bg-zinc-900/95 border-b border-zinc-800 backdrop-blur">
-        <div>
-          <h1 className="text-lg font-semibold text-zinc-100">
-            {session && typeof session === "object" && session.name ? session.name : "CMS — Édition du site"}
-          </h1>
-          <p className="text-sm text-zinc-400">Modifiez le contenu ci-dessous en direct, puis publiez.</p>
-        </div>
-        <div className="flex items-center gap-3">
-          {session && typeof session === "object" && session.siteUrl && (
-            <a
-              href={session.siteUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-amber-500 hover:text-amber-400"
+    <div className="min-h-screen bg-[var(--cms-bg)]">
+      <header className="sticky top-0 z-50 border-b border-[var(--cms-border)] bg-[var(--cms-surface)]">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+          <div className="min-w-0">
+            <h1 className="font-display truncate text-lg font-semibold text-[var(--cms-text)]">
+              {session && typeof session === "object" && session.name ? session.name : "Édition du site"}
+            </h1>
+            <p className="truncate text-xs text-[var(--cms-text-muted)] sm:text-sm">
+              Modifiez le contenu en direct, puis publiez.
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2 sm:gap-4">
+            {session && typeof session === "object" && session.siteUrl && (
+              <a
+                href={session.siteUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-white transition-opacity hover:opacity-80"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+                <span className="hidden sm:inline">Voir le site</span>
+              </a>
+            )}
+            <button
+              type="button"
+              onClick={async () => {
+                await fetch("/api/auth/logout", { method: "POST" });
+                router.push("/");
+                router.refresh();
+              }}
+              className="rounded-lg px-3 py-2 text-sm text-[var(--cms-text-muted)] transition-colors hover:text-[var(--cms-text)]"
             >
-              Voir le site →
-            </a>
+              Déconnexion
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <input id="cms-upload-hero" type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="sr-only" onChange={(e) => onImageFileChange(e, "hero")} aria-label="Remplacer l'image hero" />
+      <input id="cms-upload-about" type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="sr-only" onChange={(e) => onImageFileChange(e, "about")} aria-label="Remplacer l'image à propos" />
+
+      {uploadingImage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="flex flex-col items-center gap-4 rounded-2xl border border-[var(--cms-border)] bg-[var(--cms-surface)] px-8 py-6 shadow-2xl">
+            <div className="h-10 w-10 rounded-full border-2 border-[var(--cms-border)] border-t-white animate-spin" />
+            <p className="text-sm font-medium text-[var(--cms-text)]">Envoi de l’image…</p>
+          </div>
+        </div>
+      )}
+
+      <SitePreview
+        content={content}
+        onHero={updateHero}
+        onAbout={updateAbout}
+        onService={updateService}
+        onServicesTitle={(v) => setContent({ ...content, services: { ...content.services, title: v } })}
+        onContact={updateContact}
+        imageCacheBust={imageCacheBust}
+        siteUrl={session && typeof session === "object" ? session.siteUrl : undefined}
+      />
+
+      <footer className="sticky bottom-0 z-40 border-t border-[var(--cms-border)] bg-[var(--cms-surface)]">
+        <div className="mx-auto max-w-3xl px-4 py-4 sm:px-6">
+          {publishMessage && (
+            <p
+              className={`mb-3 flex items-center justify-center gap-2 text-sm ${
+                publishMessage.startsWith("Contenu publié") ? "text-[var(--cms-success)]" : "text-[var(--cms-error)]"
+              }`}
+            >
+              {publishMessage.startsWith("Contenu publié") ? (
+                <svg className="h-5 w-5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+              ) : null}
+              {publishMessage}
+            </p>
           )}
           <button
             type="button"
-            onClick={async () => {
-              await fetch("/api/auth/logout", { method: "POST" });
-              router.push("/");
-              router.refresh();
-            }}
-            className="text-sm text-zinc-400 hover:text-zinc-200"
+            onClick={handlePublish}
+            disabled={publishing}
+            className="w-full rounded-xl bg-white px-4 py-3.5 font-semibold text-black transition-opacity hover:opacity-90 focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-[var(--cms-bg)] disabled:opacity-50 disabled:pointer-events-none"
           >
-            Déconnexion
+            {publishing ? (
+              <span className="inline-flex items-center justify-center gap-2">
+                <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                Publication…
+              </span>
+            ) : (
+              "Modifications terminées"
+            )}
           </button>
         </div>
-      </div>
-
-      <input
-        ref={imageInputRef}
-        type="file"
-        accept="image/jpeg,image/png,image/gif,image/webp"
-        className="hidden"
-        onChange={onImageFileChange}
-        aria-hidden
-      />
-
-      {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <p className="text-zinc-400">Chargement du contenu…</p>
-        </div>
-      ) : loadError ? (
-        <div className="p-6 max-w-2xl mx-auto">
-          <div className="rounded-xl bg-zinc-900 border border-zinc-800 p-6">
-            <p className="text-red-400">{loadError}</p>
-            <p className="text-sm text-zinc-500 mt-2">Vérifiez que le dépôt contient un fichier content.json à la racine.</p>
-          </div>
-        </div>
-      ) : content ? (
-        <>
-          {uploadingImage && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-              <p className="text-white font-medium">Upload de l&apos;image…</p>
-            </div>
-          )}
-          <SitePreview
-            content={content}
-            onHero={updateHero}
-            onAbout={updateAbout}
-            onService={updateService}
-            onServicesTitle={(v) => setContent({ ...content, services: { ...content.services, title: v } })}
-            onContact={updateContact}
-            onImageUpload={handleImageUpload}
-            imageInputRef={imageInputRef}
-            imageCacheBust={imageCacheBust}
-          />
-          <div className="sticky bottom-0 z-40 px-4 py-4 bg-zinc-900/95 border-t border-zinc-800 backdrop-blur">
-            <div className="max-w-2xl mx-auto flex flex-col gap-3">
-              {publishMessage && (
-                <p className={publishMessage.startsWith("Contenu publié") ? "text-sm text-green-400" : "text-sm text-red-400"}>
-                  {publishMessage}
-                </p>
-              )}
-              <button
-                type="button"
-                onClick={handlePublish}
-                disabled={publishing}
-                className="w-full rounded-lg bg-amber-600 px-4 py-3 font-medium text-zinc-950 hover:bg-amber-500 disabled:opacity-50"
-              >
-                {publishing ? "Publication…" : "Modifications terminées"}
-              </button>
-            </div>
-          </div>
-        </>
-      ) : null}
+      </footer>
     </div>
   );
 }

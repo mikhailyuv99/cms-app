@@ -12,8 +12,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="fr">
-      <body className="min-h-screen">{children}</body>
+    <html lang="fr" className="scrollbar-hide">
+      <body className="min-h-screen bg-[var(--cms-bg)] text-[var(--cms-text)]">{children}</body>
     </html>
   );
 }
