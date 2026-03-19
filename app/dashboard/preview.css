@@ -127,7 +127,7 @@
   font-size: 1rem;
 }
 
-/* Editable inputs that look like the site text */
+/* Editable inputs/textareas that look like the site text */
 .preview-input {
   width: 100%;
   background: transparent;
@@ -136,6 +136,13 @@
   resize: none;
   padding: 0;
   margin: 0;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  word-break: break-word;
+  font: inherit;
+  color: inherit;
+  line-height: inherit;
 }
 .preview-input:focus { box-shadow: 0 0 0 2px rgba(255,255,255,0.3); border-radius: 4px; }
 .preview-services__title.preview-input { display: block; width: 100%; text-align: center; margin-bottom: 2.5rem; }

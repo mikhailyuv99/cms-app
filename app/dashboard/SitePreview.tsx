@@ -5,6 +5,44 @@ import type { ContentData, SectionId } from "@/lib/content-types";
 import { mergeTheme, getEffectiveSectionOrder } from "@/lib/content-types";
 import "./preview.css";
 
+function AutoTextarea({
+  className,
+  style,
+  value,
+  onChange,
+  placeholder,
+  "aria-label": ariaLabel,
+}: {
+  className?: string;
+  style?: React.CSSProperties;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  "aria-label"?: string;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const resize = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, []);
+  useEffect(resize, [value, resize]);
+  return (
+    <textarea
+      ref={ref}
+      className={className}
+      style={style}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      aria-label={ariaLabel}
+      rows={1}
+      onInput={resize}
+    />
+  );
+}
+
 const GRIP_ICON = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
     <circle cx="9" cy="6" r="1.5" />
@@ -231,19 +269,19 @@ export default function SitePreview({
           )}
         </div>
         <div className="preview-hero__content">
-          <input
+          <AutoTextarea
             className="preview-input preview-hero__title"
             style={{ color: theme.heroTitle }}
             value={content.hero.title}
-            onChange={(e) => onHero("title", e.target.value)}
+            onChange={(v) => onHero("title", v)}
             placeholder="Titre"
             aria-label="Titre hero"
           />
-          <input
+          <AutoTextarea
             className="preview-input preview-hero__subtitle"
             style={{ color: theme.heroSubtitle }}
             value={content.hero.subtitle}
-            onChange={(e) => onHero("subtitle", e.target.value)}
+            onChange={(v) => onHero("subtitle", v)}
             placeholder="Sous-titre"
             aria-label="Sous-titre hero"
           />
@@ -303,21 +341,20 @@ export default function SitePreview({
               </div>
           </div>
           <div className="preview-about__text">
-            <input
+            <AutoTextarea
               className="preview-input preview-about__title"
               style={{ color: theme.aboutTitle }}
               value={content.about.title}
-              onChange={(e) => onAbout("title", e.target.value)}
+              onChange={(v) => onAbout("title", v)}
               placeholder="Titre"
               aria-label="Titre à propos"
             />
-            <textarea
+            <AutoTextarea
               className="preview-input preview-about__body"
               style={{ color: theme.aboutText }}
               value={content.about.text}
-              onChange={(e) => onAbout("text", e.target.value)}
+              onChange={(v) => onAbout("text", v)}
               placeholder="Texte"
-              rows={5}
               aria-label="Texte à propos"
             />
           </div>
@@ -326,11 +363,11 @@ export default function SitePreview({
     ) : null,
     services: content.services ? (
       <section key="services" className="preview-services" style={{ background: theme.servicesBg }}>
-        <input
+        <AutoTextarea
           className="preview-input preview-services__title"
           style={{ color: theme.servicesTitle }}
           value={content.services.title}
-          onChange={(e) => onServicesTitle(e.target.value)}
+          onChange={onServicesTitle}
           placeholder="Titre services"
           aria-label="Titre services"
         />
@@ -390,10 +427,10 @@ export default function SitePreview({
             />
           )}
         </div>
-        <input
+        <AutoTextarea
           className="preview-input preview-video-loop__title"
           value={content.videoLoop.title}
-          onChange={(e) => onVideoLoopTitle(e.target.value)}
+          onChange={onVideoLoopTitle}
           placeholder="Titre"
           aria-label="Titre vidéo boucle"
         />
@@ -404,10 +441,10 @@ export default function SitePreview({
     ) : null,
     videoPlay: content.videoPlay ? (
       <section key="videoPlay" className="preview-video-play">
-        <input
+        <AutoTextarea
           className="preview-input preview-video-play__title"
           value={content.videoPlay.title}
-          onChange={(e) => onVideoPlayTitle(e.target.value)}
+          onChange={onVideoPlayTitle}
           placeholder="Titre"
           aria-label="Titre vidéo lecture"
         />
@@ -435,19 +472,19 @@ export default function SitePreview({
     ) : null,
     contact: content.contact ? (
       <section key="contact" className="preview-contact">
-        <input
+        <AutoTextarea
           className="preview-input preview-contact__title"
           style={{ color: theme.contactTitle }}
           value={content.contact.title}
-          onChange={(e) => onContact("title", e.target.value)}
+          onChange={(v) => onContact("title", v)}
           placeholder="Titre contact"
           aria-label="Titre contact"
         />
-        <input
+        <AutoTextarea
           className="preview-input preview-contact__text"
           style={{ color: theme.contactText }}
           value={content.contact.text}
-          onChange={(e) => onContact("text", e.target.value)}
+          onChange={(v) => onContact("text", v)}
           placeholder="Texte"
           aria-label="Texte contact"
         />
