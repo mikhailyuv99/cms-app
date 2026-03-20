@@ -191,6 +191,61 @@ function useImageDrag(
   return { onPointerDown: onDown, onPointerMove: onMove, onPointerUp: onUp, onPointerCancel: onUp };
 }
 
+/**
+ * Pan du média dans le cadre avec UX "appuyer-glisser-relâcher" sur l'icône.
+ * Important: le drag démarre sur le bouton (handle), pas sur l'image/vidéo.
+ */
+function useMediaPanHandleDrag(
+  containerRef: React.RefObject<HTMLElement | null>,
+  position: Position | undefined,
+  onPosition: (p: Position) => void,
+  enabled: boolean,
+) {
+  const [isDragging, setIsDragging] = useState(false);
+  const startRef = useRef({ px: 0, py: 0, ox: 50, oy: 50 });
+
+  useEffect(() => {
+    if (!isDragging) return;
+    const onMove = (e: PointerEvent) => {
+      const el = containerRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+      const dx = ((e.clientX - startRef.current.px) / rect.width) * -100;
+      const dy = ((e.clientY - startRef.current.py) / rect.height) * -100;
+      const nx = Math.max(0, Math.min(100, startRef.current.ox + dx));
+      const ny = Math.max(0, Math.min(100, startRef.current.oy + dy));
+      onPosition({ x: Math.round(nx), y: Math.round(ny) });
+    };
+
+    const onUp = () => setIsDragging(false);
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+    document.addEventListener("pointercancel", onUp);
+    return () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      document.removeEventListener("pointercancel", onUp);
+    };
+  }, [isDragging, containerRef, onPosition]);
+
+  const onHandlePointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      if (!enabled) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const ox = position?.x ?? 50;
+      const oy = position?.y ?? 50;
+      startRef.current = { px: e.clientX, py: e.clientY, ox, oy };
+      setIsDragging(true);
+      (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+    },
+    [enabled, position],
+  );
+
+  return { isDragging, onHandlePointerDown };
+}
+
 function useTextDragHandle(
   sectionRef: React.RefObject<HTMLElement | null>,
   position: Position | undefined,
@@ -329,24 +384,6 @@ export default function SitePreview({
   const aboutMediaRef = useRef<HTMLDivElement>(null);
   const videoLoopMediaRef = useRef<HTMLDivElement>(null);
 
-  /** Pan dans le cadre : images hero/about + vidéo uniquement en section loop (pas hero vidéo / about vidéo / lecture). */
-  type MediaPanSection = "hero" | "about" | "videoLoop";
-  const [mediaPanSection, setMediaPanSection] = useState<MediaPanSection | null>(null);
-  const toggleMediaPan = useCallback((id: MediaPanSection) => {
-    setMediaPanSection((prev) => (prev === id ? null : id));
-  }, []);
-
-  const heroImagePanActive = mediaPanSection === "hero" && !content.hero?.video;
-  const aboutImagePanActive = mediaPanSection === "about" && !content.about?.video;
-  const videoLoopPanActive = mediaPanSection === "videoLoop";
-
-  useEffect(() => {
-    if (mediaPanSection === "hero" && content.hero?.video) setMediaPanSection(null);
-  }, [mediaPanSection, content.hero?.video]);
-  useEffect(() => {
-    if (mediaPanSection === "about" && content.about?.video) setMediaPanSection(null);
-  }, [mediaPanSection, content.about?.video]);
-
   const heroTextDrag = useTextDragHandle(heroRef, content.hero?.contentPosition, (p) => onContentPosition("hero", p));
   const aboutTextDrag = useTextDragHandle(aboutGridRef, content.about?.contentPosition, (p) => onContentPosition("about", p));
   const videoLoopTextDrag = useTextDragHandle(videoLoopRef, content.videoLoop?.contentPosition, (p) => onContentPosition("videoLoop", p));
@@ -354,13 +391,24 @@ export default function SitePreview({
   const contactTextDrag = useTextDragHandle(contactRef, content.contact?.contentPosition, (p) => onContentPosition("contact", p));
   const servicesTextDrag = useTextDragHandle(servicesRef, content.services?.contentPosition, (p) => onContentPosition("services", p));
 
-  const heroImgDrag = useImageDrag(heroMediaRef, content.hero?.imagePosition, (p) => onImagePosition("hero", p), heroImagePanActive);
-  const aboutImgDrag = useImageDrag(aboutMediaRef, content.about?.imagePosition, (p) => onImagePosition("about", p), aboutImagePanActive);
-  const videoLoopImgDrag = useImageDrag(
+  // UX: appuyer sur l'icône main -> déplacer -> relâcher pour figer.
+  const heroImagePan = useMediaPanHandleDrag(
+    heroMediaRef,
+    content.hero?.imagePosition,
+    (p) => onImagePosition("hero", p),
+    Boolean(content.hero && !content.hero.video),
+  );
+  const aboutImagePan = useMediaPanHandleDrag(
+    aboutMediaRef,
+    content.about?.imagePosition,
+    (p) => onImagePosition("about", p),
+    Boolean(content.about && !content.about.video),
+  );
+  const videoLoopPan = useMediaPanHandleDrag(
     videoLoopMediaRef,
     content.videoLoop?.imagePosition,
     (p) => onImagePosition("videoLoop", p),
-    videoLoopPanActive,
+    Boolean(content.videoLoop && content.videoLoop.video),
   );
 
   const [dragOverSection, setDragOverSection] = useState<number | null>(null);
@@ -451,26 +499,6 @@ export default function SitePreview({
     return `${pos?.x ?? 50}% ${pos?.y ?? 50}%`;
   }
 
-  function mediaPanButton(id: MediaPanSection) {
-    const active = mediaPanSection === id;
-    const title =
-      id === "videoLoop"
-        ? "Vidéo en boucle : activer puis glisser pour recadrer dans le cadre"
-        : "Image : activer puis glisser pour recadrer dans le cadre";
-    return (
-      <button
-        type="button"
-        className={`preview-media-btn preview-media-pan-btn${active ? " active" : ""}`}
-        title={title}
-        aria-label={id === "videoLoop" ? "Déplacer la vidéo en boucle dans le cadre" : "Déplacer l’image dans le cadre"}
-        aria-pressed={active}
-        onClick={() => toggleMediaPan(id)}
-      >
-        {HAND_ICON}
-      </button>
-    );
-  }
-
   function textDragBtn(drag: ReturnType<typeof useTextDragHandle>) {
     return (
       <button
@@ -492,8 +520,7 @@ export default function SitePreview({
           <div
             className="preview-hero__media"
             ref={heroMediaRef}
-            style={heroImagePanActive ? { cursor: "grab", touchAction: "none" } : undefined}
-            {...(heroImagePanActive ? heroImgDrag : {})}
+            style={heroImagePan.isDragging ? { cursor: "grabbing", touchAction: "none" } : undefined}
           >
             {content.hero.video ? (
               <HeroVideo
@@ -510,7 +537,7 @@ export default function SitePreview({
                   className="preview-hero__image"
                   style={{
                     objectPosition: objPos(content.hero.imagePosition),
-                    pointerEvents: heroImagePanActive ? "none" : undefined,
+                    pointerEvents: heroImagePan.isDragging ? "none" : undefined,
                   }}
                   src={imageSrc(content.hero.image, siteUrl, imageCacheBust)}
                   alt=""
@@ -524,7 +551,7 @@ export default function SitePreview({
                 className="preview-hero__image"
                 style={{
                   objectPosition: objPos(content.hero.imagePosition),
-                  pointerEvents: heroImagePanActive ? "none" : undefined,
+                  pointerEvents: heroImagePan.isDragging ? "none" : undefined,
                 }}
                 src={imageSrc(content.hero.image, siteUrl, imageCacheBust)}
                 alt=""
@@ -564,7 +591,18 @@ export default function SitePreview({
               Remplacer la vidéo
             </label>
           )}
-          {!content.hero.video && mediaPanButton("hero")}
+          {!content.hero.video && (
+            <button
+              type="button"
+              className={`preview-media-btn preview-media-pan-btn${heroImagePan.isDragging ? " active" : ""}`}
+              title="Appuyer + glisser (relâcher pour valider) : recadrer l’image"
+              aria-label="Déplacer l'image dans le cadre"
+              aria-pressed={heroImagePan.isDragging}
+              onPointerDown={heroImagePan.onHandlePointerDown}
+            >
+              {HAND_ICON}
+            </button>
+          )}
         </div>
       </header>
     ) : null,
@@ -575,8 +613,7 @@ export default function SitePreview({
           <div
             className="preview-about__media"
             ref={aboutMediaRef}
-            style={aboutImagePanActive ? { cursor: "grab", touchAction: "none" } : undefined}
-            {...(aboutImagePanActive ? aboutImgDrag : {})}
+            style={aboutImagePan.isDragging ? { cursor: "grabbing", touchAction: "none" } : undefined}
           >
             {content.about.video ? (
               <video
@@ -597,7 +634,7 @@ export default function SitePreview({
                   className="preview-about__image"
                   style={{
                     objectPosition: objPos(content.about.imagePosition),
-                    pointerEvents: aboutImagePanActive ? "none" : undefined,
+                    pointerEvents: aboutImagePan.isDragging ? "none" : undefined,
                   }}
                   src={imageSrc(content.about.image, siteUrl, imageCacheBust)}
                   alt=""
@@ -610,7 +647,7 @@ export default function SitePreview({
                 className="preview-about__image"
                 style={{
                   objectPosition: objPos(content.about.imagePosition),
-                  pointerEvents: aboutImagePanActive ? "none" : undefined,
+                  pointerEvents: aboutImagePan.isDragging ? "none" : undefined,
                 }}
                 src={imageSrc(content.about.image, siteUrl, imageCacheBust)}
                 alt=""
@@ -627,7 +664,18 @@ export default function SitePreview({
                   Remplacer la vidéo
                 </label>
               )}
-              {!content.about.video && mediaPanButton("about")}
+              {!content.about.video && (
+                <button
+                  type="button"
+                  className={`preview-media-btn preview-media-pan-btn${aboutImagePan.isDragging ? " active" : ""}`}
+                  title="Appuyer + glisser (relâcher pour valider) : recadrer l’image"
+                  aria-label="Déplacer l'image dans le cadre"
+                  aria-pressed={aboutImagePan.isDragging}
+                  onPointerDown={aboutImagePan.onHandlePointerDown}
+                >
+                  {HAND_ICON}
+                </button>
+              )}
             </div>
           </div>
           {aboutTextDrag.isDragging && <AlignmentGuides activeGuides={aboutTextDrag.activeGuides} />}
@@ -719,15 +767,14 @@ export default function SitePreview({
         <div
           className="preview-video-loop__media"
           ref={videoLoopMediaRef}
-          style={videoLoopPanActive ? { cursor: "grab", touchAction: "none" } : undefined}
-          {...(videoLoopPanActive ? videoLoopImgDrag : {})}
+          style={videoLoopPan.isDragging ? { cursor: "grabbing", touchAction: "none" } : undefined}
         >
           {content.videoLoop.video && (
             <HeroVideo
               className="preview-video-loop__video"
               style={{
                 objectPosition: objPos(content.videoLoop.imagePosition),
-                pointerEvents: videoLoopPanActive ? "none" : undefined,
+                pointerEvents: videoLoopPan.isDragging ? "none" : undefined,
               }}
               src={imageSrc(content.videoLoop.video, siteUrl, imageCacheBust)}
               poster=""
@@ -749,7 +796,18 @@ export default function SitePreview({
           <label htmlFor="cms-upload-videoloop-video" className="preview-media-btn">
             Remplacer la vidéo
           </label>
-          {mediaPanButton("videoLoop")}
+          {content.videoLoop.video && (
+            <button
+              type="button"
+              className={`preview-media-btn preview-media-pan-btn${videoLoopPan.isDragging ? " active" : ""}`}
+              title="Appuyer + glisser (relâcher pour valider) : recadrer la vidéo en boucle"
+              aria-label="Déplacer la vidéo en boucle dans le cadre"
+              aria-pressed={videoLoopPan.isDragging}
+              onPointerDown={videoLoopPan.onHandlePointerDown}
+            >
+              {HAND_ICON}
+            </button>
+          )}
         </div>
       </section>
     ) : null,
