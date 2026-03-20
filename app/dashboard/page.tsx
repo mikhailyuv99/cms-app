@@ -49,6 +49,9 @@ export default function DashboardPage() {
   const [compressionProgress, setCompressionProgress] = useState(0);
   const [compressionLog, setCompressionLog] = useState("");
   const [uploadProgress, setUploadProgress] = useState(0);
+  /** cms = gabarit éditable ; live = iframe du site réel (fidélité pixel pour tout thème) */
+  const [previewMode, setPreviewMode] = useState<"cms" | "live">("cms");
+  const [liveIframeKey, setLiveIframeKey] = useState(0);
 
   const applyPageUpdate = useCallback(
     (updater: (page: ContentData) => ContentData) => {
@@ -133,6 +136,7 @@ export default function DashboardPage() {
         return;
       }
       setPublishMessage("Contenu publié. Le site sera mis à jour après le déploiement Netlify.");
+      setLiveIframeKey((k) => k + 1);
       const refreshRes = await fetch("/api/content");
       const refreshData = await refreshRes.json();
       if (refreshData.sha) setSha(refreshData.sha);
@@ -488,6 +492,8 @@ export default function DashboardPage() {
   const pageOrder = getPageOrder(content);
   const pageContent = getCurrentPageContent(content, currentPageSlug);
   const showPageTabs = isMultiPage(content) && pageOrder.length > 1;
+  const siteUrl = session && typeof session === "object" ? session.siteUrl : undefined;
+  const showLivePreview = Boolean(siteUrl);
 
   return (
     <div className="min-h-screen bg-[var(--cms-bg)]">
@@ -497,6 +503,25 @@ export default function DashboardPage() {
             <h1 className="font-display truncate text-base font-semibold text-[var(--cms-text)] sm:text-lg">
               {session && typeof session === "object" && session.name ? session.name : "Édition du site"}
             </h1>
+            {showLivePreview && (
+              <div className="flex min-w-0 max-w-[11rem] shrink items-center rounded-md border border-[var(--cms-border)] bg-[var(--cms-bg)] p-0.5 sm:max-w-none" role="group" aria-label="Mode de prévisualisation">
+                <button
+                  type="button"
+                  onClick={() => setPreviewMode("cms")}
+                  className={`rounded px-2 py-1 text-xs font-semibold sm:px-2.5 sm:text-sm ${previewMode === "cms" ? "bg-[var(--cms-surface)] text-[var(--cms-text)]" : "text-[var(--cms-text-muted)] hover:text-[var(--cms-text)]"}`}
+                >
+                  Édition
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewMode("live")}
+                  className={`rounded px-2 py-1 text-xs font-semibold sm:px-2.5 sm:text-sm ${previewMode === "live" ? "bg-[var(--cms-surface)] text-[var(--cms-text)]" : "text-[var(--cms-text-muted)] hover:text-[var(--cms-text)]"}`}
+                  title="Affiche le site déployé tel quel (CSS / layout du repo)"
+                >
+                  Site déployé
+                </button>
+              </div>
+            )}
             <div className="flex shrink-0 items-center rounded-md border border-[var(--cms-border)] bg-[var(--cms-bg)] p-0.5">
               <button
                 type="button"
@@ -548,9 +573,9 @@ export default function DashboardPage() {
                 "ENREGISTRER"
               )}
             </button>
-            {session && typeof session === "object" && session.siteUrl && (
+            {siteUrl && (
               <a
-                href={session.siteUrl}
+                href={siteUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center justify-center rounded-md p-1.5 text-white transition-opacity hover:opacity-80 sm:rounded-lg sm:p-2"
@@ -615,25 +640,44 @@ export default function DashboardPage() {
       )}
 
       <div className="preview-viewport">
-        <SitePreview
-          content={pageContent}
-          onHero={updateHero}
-          onAbout={updateAbout}
-          onService={updateService}
-          onServicesTitle={(v) => applyPageUpdate((c) => ({ ...c, services: { ...(c.services ?? { title: "", items: [] }), title: v } }))}
-          onContact={updateContact}
-          onVideoLoopTitle={(v) => applyPageUpdate((c) => ({ ...c, videoLoop: { ...(c.videoLoop ?? { title: "", video: "" }), title: v } }))}
-          onVideoPlayTitle={(v) => applyPageUpdate((c) => ({ ...c, videoPlay: { ...(c.videoPlay ?? { title: "", video: "" }), title: v } }))}
-          onSectionReorder={reorderSection}
-          onServiceCardReorder={reorderServiceCard}
-          onImagePosition={handleImagePosition}
-          onContentPosition={handleContentPosition}
-          imageCacheBust={imageCacheBust}
-          siteUrl={session && typeof session === "object" ? session.siteUrl : undefined}
-          pageOrder={showPageTabs ? pageOrder : undefined}
-          currentPageSlug={showPageTabs ? currentPageSlug : undefined}
-          onPageChange={showPageTabs ? setCurrentPageSlug : undefined}
-        />
+        {previewMode === "live" && siteUrl ? (
+          <div className="flex min-h-[calc(100dvh-3.25rem)] flex-col bg-[var(--cms-bg)]">
+            <p className="border-b border-[var(--cms-border)] px-3 py-2 text-center text-xs text-[var(--cms-text-muted)] sm:text-sm">
+              <strong className="text-[var(--cms-text)]">Site déployé</strong> — rendu identique au site public (thème, cadres, marges). Les changements non enregistrés / non déployés ne s’affichent pas ici. Passe en{" "}
+              <button type="button" className="font-semibold text-white underline" onClick={() => setPreviewMode("cms")}>
+                Édition
+              </button>{" "}
+              pour modifier.
+            </p>
+            <iframe
+              key={liveIframeKey}
+              src={siteUrl}
+              title="Prévisualisation du site déployé"
+              className="w-full flex-1 min-h-[70dvh] border-0 bg-white"
+              referrerPolicy="strict-origin-when-cross-origin"
+            />
+          </div>
+        ) : (
+          <SitePreview
+            content={pageContent}
+            onHero={updateHero}
+            onAbout={updateAbout}
+            onService={updateService}
+            onServicesTitle={(v) => applyPageUpdate((c) => ({ ...c, services: { ...(c.services ?? { title: "", items: [] }), title: v } }))}
+            onContact={updateContact}
+            onVideoLoopTitle={(v) => applyPageUpdate((c) => ({ ...c, videoLoop: { ...(c.videoLoop ?? { title: "", video: "" }), title: v } }))}
+            onVideoPlayTitle={(v) => applyPageUpdate((c) => ({ ...c, videoPlay: { ...(c.videoPlay ?? { title: "", video: "" }), title: v } }))}
+            onSectionReorder={reorderSection}
+            onServiceCardReorder={reorderServiceCard}
+            onImagePosition={handleImagePosition}
+            onContentPosition={handleContentPosition}
+            imageCacheBust={imageCacheBust}
+            siteUrl={siteUrl}
+            pageOrder={showPageTabs ? pageOrder : undefined}
+            currentPageSlug={showPageTabs ? currentPageSlug : undefined}
+            onPageChange={showPageTabs ? setCurrentPageSlug : undefined}
+          />
+        )}
       </div>
 
     </div>

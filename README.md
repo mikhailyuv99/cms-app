@@ -39,6 +39,15 @@ Ouvrir **http://localhost:3000**. Le client entre le **mot de passe de son proje
 
 4. Commit, push, et redéployer le CMS. Donner au client l’URL du CMS et le mot de passe choisi.
 
+## Prévisualisation (fidélité au site réel)
+
+Dans le tableau de bord, deux modes :
+
+- **Édition** — gabarit React du CMS : idéal pour modifier textes, médias, positions. Il suit le **modèle** (sections + `preview.css`) : si le site client a un **thème ou un HTML très différent** du mockup, l’aperçu peut ne pas être pixel-identique.
+- **Site déployé** — charge l’URL `siteUrl` du projet dans une **iframe** : c’est **exactement** le site public (CSS, cadres, marges, tout). Les brouillons non publiés ne s’y voient pas ; après **Enregistrer**, attendre le déploiement Netlify puis rafraîchir ou repasser sur ce mode.
+
+> Pour éditer *sur* le rendu pixel-parfait, il faudrait un script embarqué côté site (postMessage) ou même origine — ce n’est pas le cas par défaut, pour respecter la règle d’indépendance CMS / sites clients.
+
 ## Prérequis
 
 - **GITHUB_TOKEN** : token (classic) du **compte bot**, avec le scope `repo`. Ce compte ne doit être collaborateur **que** sur les dépôts des sites clients, pas sur vos autres repos.
