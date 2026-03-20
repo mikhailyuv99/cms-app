@@ -4,5 +4,10 @@
     "passwordHash": "$2a$10$FABlS9mADmMkILVYxQq9LOKqubB8DaUeq92vO5fLHHSo7Bwt8Z9Ja",
     "siteUrl": "https://mockupsite1.netlify.app",
     "name": "Mockup site"
+  },
+  {
+    "repo": "mikhailyuv99/highend-av-site",
+    "passwordHash": "$2a$10$w.DnXeeDqnkrAGK3wYLN.u5litoYdIk/tE8BhSX/cZT7KnlQWdp4e",
+    "name": "NOIR ATELIER"
   }
 ]
