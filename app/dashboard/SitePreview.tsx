@@ -325,11 +325,27 @@ export default function SitePreview({
   const contactRef = useRef<HTMLElement>(null);
   const servicesRef = useRef<HTMLElement>(null);
 
+  const heroMediaRef = useRef<HTMLDivElement>(null);
+  const aboutMediaRef = useRef<HTMLDivElement>(null);
   const videoLoopMediaRef = useRef<HTMLDivElement>(null);
 
-  /** Pan média dans le cadre : uniquement section vidéo en boucle (comme demandé). */
-  const [videoLoopPanActive, setVideoLoopPanActive] = useState(false);
-  const toggleVideoLoopPan = useCallback(() => setVideoLoopPanActive((v) => !v), []);
+  /** Pan dans le cadre : images hero/about + vidéo uniquement en section loop (pas hero vidéo / about vidéo / lecture). */
+  type MediaPanSection = "hero" | "about" | "videoLoop";
+  const [mediaPanSection, setMediaPanSection] = useState<MediaPanSection | null>(null);
+  const toggleMediaPan = useCallback((id: MediaPanSection) => {
+    setMediaPanSection((prev) => (prev === id ? null : id));
+  }, []);
+
+  const heroImagePanActive = mediaPanSection === "hero" && !content.hero?.video;
+  const aboutImagePanActive = mediaPanSection === "about" && !content.about?.video;
+  const videoLoopPanActive = mediaPanSection === "videoLoop";
+
+  useEffect(() => {
+    if (mediaPanSection === "hero" && content.hero?.video) setMediaPanSection(null);
+  }, [mediaPanSection, content.hero?.video]);
+  useEffect(() => {
+    if (mediaPanSection === "about" && content.about?.video) setMediaPanSection(null);
+  }, [mediaPanSection, content.about?.video]);
 
   const heroTextDrag = useTextDragHandle(heroRef, content.hero?.contentPosition, (p) => onContentPosition("hero", p));
   const aboutTextDrag = useTextDragHandle(aboutRef, content.about?.contentPosition, (p) => onContentPosition("about", p));
@@ -338,6 +354,8 @@ export default function SitePreview({
   const contactTextDrag = useTextDragHandle(contactRef, content.contact?.contentPosition, (p) => onContentPosition("contact", p));
   const servicesTextDrag = useTextDragHandle(servicesRef, content.services?.contentPosition, (p) => onContentPosition("services", p));
 
+  const heroImgDrag = useImageDrag(heroMediaRef, content.hero?.imagePosition, (p) => onImagePosition("hero", p), heroImagePanActive);
+  const aboutImgDrag = useImageDrag(aboutMediaRef, content.about?.imagePosition, (p) => onImagePosition("about", p), aboutImagePanActive);
   const videoLoopImgDrag = useImageDrag(
     videoLoopMediaRef,
     content.videoLoop?.imagePosition,
@@ -433,15 +451,20 @@ export default function SitePreview({
     return `${pos?.x ?? 50}% ${pos?.y ?? 50}%`;
   }
 
-  function videoLoopPanButton() {
+  function mediaPanButton(id: MediaPanSection) {
+    const active = mediaPanSection === id;
+    const title =
+      id === "videoLoop"
+        ? "Vidéo en boucle : activer puis glisser pour recadrer dans le cadre"
+        : "Image : activer puis glisser pour recadrer dans le cadre";
     return (
       <button
         type="button"
-        className={`preview-media-btn preview-media-pan-btn${videoLoopPanActive ? " active" : ""}`}
-        title="Vidéo en boucle : activer puis cliquer-glisser sur la vidéo pour recadrer"
-        aria-label="Déplacer la vidéo en boucle dans le cadre"
-        aria-pressed={videoLoopPanActive}
-        onClick={() => toggleVideoLoopPan()}
+        className={`preview-media-btn preview-media-pan-btn${active ? " active" : ""}`}
+        title={title}
+        aria-label={id === "videoLoop" ? "Déplacer la vidéo en boucle dans le cadre" : "Déplacer l’image dans le cadre"}
+        aria-pressed={active}
+        onClick={() => toggleMediaPan(id)}
       >
         {HAND_ICON}
       </button>
@@ -466,7 +489,12 @@ export default function SitePreview({
     hero: content.hero ? (
       <header key="hero" className="preview-hero" ref={heroRef as React.Ref<HTMLElement>}>
         <div className="preview-hero__bg">
-          <div className="preview-hero__media">
+          <div
+            className="preview-hero__media"
+            ref={heroMediaRef}
+            style={heroImagePanActive ? { cursor: "grab", touchAction: "none" } : undefined}
+            {...(heroImagePanActive ? heroImgDrag : {})}
+          >
             {content.hero.video ? (
               <HeroVideo
                 className="preview-hero__image"
@@ -480,7 +508,10 @@ export default function SitePreview({
                 {content.hero.imageWebp && <source type="image/webp" srcSet={imageSrc(content.hero.imageWebp, siteUrl, imageCacheBust)} />}
                 <img
                   className="preview-hero__image"
-                  style={{ objectPosition: objPos(content.hero.imagePosition) }}
+                  style={{
+                    objectPosition: objPos(content.hero.imagePosition),
+                    pointerEvents: heroImagePanActive ? "none" : undefined,
+                  }}
                   src={imageSrc(content.hero.image, siteUrl, imageCacheBust)}
                   alt=""
                   loading="eager"
@@ -491,7 +522,10 @@ export default function SitePreview({
             ) : (
               <img
                 className="preview-hero__image"
-                style={{ objectPosition: objPos(content.hero.imagePosition) }}
+                style={{
+                  objectPosition: objPos(content.hero.imagePosition),
+                  pointerEvents: heroImagePanActive ? "none" : undefined,
+                }}
                 src={imageSrc(content.hero.image, siteUrl, imageCacheBust)}
                 alt=""
                 loading="eager"
@@ -530,6 +564,7 @@ export default function SitePreview({
               Remplacer la vidéo
             </label>
           )}
+          {!content.hero.video && mediaPanButton("hero")}
         </div>
       </header>
     ) : null,
@@ -537,7 +572,12 @@ export default function SitePreview({
     about: content.about ? (
       <section key="about" className="preview-about" ref={aboutRef as React.Ref<HTMLElement>}>
         <div className="preview-about__grid">
-          <div className="preview-about__media">
+          <div
+            className="preview-about__media"
+            ref={aboutMediaRef}
+            style={aboutImagePanActive ? { cursor: "grab", touchAction: "none" } : undefined}
+            {...(aboutImagePanActive ? aboutImgDrag : {})}
+          >
             {content.about.video ? (
               <video
                 className="preview-about__image"
@@ -555,7 +595,10 @@ export default function SitePreview({
                 {content.about.imageWebp && <source type="image/webp" srcSet={imageSrc(content.about.imageWebp, siteUrl, imageCacheBust)} />}
                 <img
                   className="preview-about__image"
-                  style={{ objectPosition: objPos(content.about.imagePosition) }}
+                  style={{
+                    objectPosition: objPos(content.about.imagePosition),
+                    pointerEvents: aboutImagePanActive ? "none" : undefined,
+                  }}
                   src={imageSrc(content.about.image, siteUrl, imageCacheBust)}
                   alt=""
                   loading="eager"
@@ -565,7 +608,10 @@ export default function SitePreview({
             ) : (
               <img
                 className="preview-about__image"
-                style={{ objectPosition: objPos(content.about.imagePosition) }}
+                style={{
+                  objectPosition: objPos(content.about.imagePosition),
+                  pointerEvents: aboutImagePanActive ? "none" : undefined,
+                }}
                 src={imageSrc(content.about.image, siteUrl, imageCacheBust)}
                 alt=""
                 loading="eager"
@@ -581,6 +627,7 @@ export default function SitePreview({
                   Remplacer la vidéo
                 </label>
               )}
+              {!content.about.video && mediaPanButton("about")}
             </div>
           </div>
           {aboutTextDrag.isDragging && <AlignmentGuides activeGuides={aboutTextDrag.activeGuides} />}
@@ -702,7 +749,7 @@ export default function SitePreview({
           <label htmlFor="cms-upload-videoloop-video" className="preview-media-btn">
             Remplacer la vidéo
           </label>
-          {videoLoopPanButton()}
+          {mediaPanButton("videoLoop")}
         </div>
       </section>
     ) : null,
