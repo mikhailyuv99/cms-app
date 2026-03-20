@@ -54,7 +54,7 @@ export async function putFile(owner: string, repo: string, path: string, content
   }
 }
 
-/** Create or update a binary file (e.g. image). Pass sha only when updating. */
+/** Create or update a binary file (e.g. image). Returns the commit SHA on success. */
 export async function putFileBinary(
   owner: string,
   repo: string,
@@ -62,9 +62,9 @@ export async function putFileBinary(
   contentBase64: string,
   message: string,
   sha?: string
-): Promise<boolean> {
+): Promise<{ ok: true; commitSha: string } | { ok: false }> {
   try {
-    await octokit.rest.repos.createOrUpdateFileContents({
+    const res = await octokit.rest.repos.createOrUpdateFileContents({
       owner,
       repo,
       path,
@@ -72,8 +72,8 @@ export async function putFileBinary(
       message,
       ...(sha ? { sha } : {}),
     });
-    return true;
+    return { ok: true, commitSha: res.data.commit.sha ?? "" };
   } catch {
-    return false;
+    return { ok: false };
   }
 }

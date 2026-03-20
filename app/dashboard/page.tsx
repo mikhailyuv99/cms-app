@@ -429,11 +429,6 @@ export default function DashboardPage() {
     return { path: filePath, rawUrl };
   }
 
-  function imgExt(file: File): string {
-    const map: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp" };
-    return map[file.type] || file.name.split(".").pop()?.toLowerCase() || "jpg";
-  }
-
   async function onImageFileChange(e: React.ChangeEvent<HTMLInputElement>, key: "hero" | "about") {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -441,15 +436,30 @@ export default function DashboardPage() {
     setUploadingMedia(key);
     setUploadProgress(0);
     try {
-      const filePath = `images/${key}.${imgExt(file)}`;
-      const { rawUrl } = await uploadDirectToGitHub(file, filePath);
-      previewOverridesRef.current.set(filePath, rawUrl);
+      const form = new FormData();
+      form.append("file", file);
+      form.append("key", key);
+      const res = await xhrPost("/api/upload-image", form, undefined, (r) => setUploadProgress(r));
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        setPublishMessage(data.error || `Échec upload (${res.status})`);
+        return;
+      }
+      const data = (await res.json()) as { path: string; rawUrl: string; pathWebp?: string; pathAvif?: string };
+      previewOverridesRef.current.set(data.path, data.rawUrl);
+      if (data.pathWebp) previewOverridesRef.current.set(data.pathWebp, data.rawUrl);
+      if (data.pathAvif) previewOverridesRef.current.set(data.pathAvif, data.rawUrl);
       applyPageUpdate((c) => ({
         ...c,
-        [key]: { ...(c[key] as object), image: filePath } as NonNullable<ContentData[typeof key]>,
+        [key]: {
+          ...(c[key] as object),
+          image: data.path,
+          ...(data.pathWebp && { imageWebp: data.pathWebp }),
+          ...(data.pathAvif && { imageAvif: data.pathAvif }),
+        } as NonNullable<ContentData[typeof key]>,
       }));
-    } catch (err) {
-      setPublishMessage(`Upload image: ${err instanceof Error ? err.message : "réseau"}`);
+    } catch {
+      setPublishMessage("Erreur réseau lors de l'upload");
     } finally {
       setUploadingMedia(null);
     }
@@ -478,20 +488,42 @@ export default function DashboardPage() {
 
     setUploadingMedia(key);
     setUploadProgress(0);
+
+    let uploadedPath: string | null = null;
+    let uploadedRawUrl: string | null = null;
+
     try {
-      const ext = videoFile.type === "video/webm" ? "webm" : "mp4";
-      const filePath = `images/${key}.${ext}`;
-      const { rawUrl } = await uploadDirectToGitHub(videoFile, filePath);
-      previewOverridesRef.current.set(filePath, rawUrl);
-      if (key === "hero-video") applyPageUpdate((c) => ({ ...c, hero: { ...c.hero, video: filePath } as NonNullable<ContentData["hero"]> }));
-      else if (key === "about-video") applyPageUpdate((c) => ({ ...c, about: { ...c.about, video: filePath } as NonNullable<ContentData["about"]> }));
-      else if (key === "videoLoop-video") applyPageUpdate((c) => ({ ...c, videoLoop: { ...(c.videoLoop ?? { title: "", video: "" }), video: filePath } }));
-      else if (key === "videoPlay-video") applyPageUpdate((c) => ({ ...c, videoPlay: { ...(c.videoPlay ?? { title: "", video: "" }), video: filePath } }));
-    } catch (err) {
-      setPublishMessage(`Upload vidéo: ${err instanceof Error ? err.message : "réseau"}`);
-    } finally {
-      setUploadingMedia(null);
+      const form = new FormData();
+      form.append("file", videoFile);
+      form.append("key", key);
+      const res = await xhrPost("/api/upload-video", form, undefined, (r) => setUploadProgress(r));
+      if (res.ok) {
+        const data = (await res.json()) as { path: string; rawUrl: string };
+        uploadedPath = data.path;
+        uploadedRawUrl = data.rawUrl;
+      }
+    } catch { /* server upload failed, try direct */ }
+
+    if (!uploadedPath) {
+      try {
+        const ext = videoFile.type === "video/webm" ? "webm" : "mp4";
+        const filePath = `images/${key}.${ext}`;
+        const { path, rawUrl } = await uploadDirectToGitHub(videoFile, filePath);
+        uploadedPath = path;
+        uploadedRawUrl = rawUrl;
+      } catch (err) {
+        setPublishMessage(`Upload vidéo échoué: ${err instanceof Error ? err.message : "Vérifiez les permissions du token GitHub."}`);
+        setUploadingMedia(null);
+        return;
+      }
     }
+
+    previewOverridesRef.current.set(uploadedPath, uploadedRawUrl!);
+    if (key === "hero-video") applyPageUpdate((c) => ({ ...c, hero: { ...c.hero, video: uploadedPath } as NonNullable<ContentData["hero"]> }));
+    else if (key === "about-video") applyPageUpdate((c) => ({ ...c, about: { ...c.about, video: uploadedPath } as NonNullable<ContentData["about"]> }));
+    else if (key === "videoLoop-video") applyPageUpdate((c) => ({ ...c, videoLoop: { ...(c.videoLoop ?? { title: "", video: "" }), video: uploadedPath! } }));
+    else if (key === "videoPlay-video") applyPageUpdate((c) => ({ ...c, videoPlay: { ...(c.videoPlay ?? { title: "", video: "" }), video: uploadedPath! } }));
+    setUploadingMedia(null);
   }
 
   async function onPosterFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -501,10 +533,18 @@ export default function DashboardPage() {
     setUploadingMedia("poster");
     setUploadProgress(0);
     try {
-      const filePath = `images/videoPlay-poster.${imgExt(file)}`;
-      const { rawUrl } = await uploadDirectToGitHub(file, filePath);
-      previewOverridesRef.current.set(filePath, rawUrl);
-      applyPageUpdate((c) => ({ ...c, videoPlay: { ...(c.videoPlay ?? { title: "", video: "" }), poster: filePath } }));
+      const form = new FormData();
+      form.append("file", file);
+      form.append("key", "videoPlay-poster");
+      const res = await xhrPost("/api/upload-image", form, undefined, (r) => setUploadProgress(r));
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        setPublishMessage(data.error || `Échec upload (${res.status})`);
+        return;
+      }
+      const data = (await res.json()) as { path: string; rawUrl: string };
+      previewOverridesRef.current.set(data.path, data.rawUrl);
+      applyPageUpdate((c) => ({ ...c, videoPlay: { ...(c.videoPlay ?? { title: "", video: "" }), poster: data.path } }));
     } catch (err) {
       setPublishMessage(`Upload poster: ${err instanceof Error ? err.message : "réseau"}`);
     } finally {
