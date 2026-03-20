@@ -102,7 +102,6 @@ export default function DashboardPage() {
   const [iframeReady, setIframeReady] = useState(false);
   const [iframeSrc, setIframeSrc] = useState<string | null>(null);
   const [iframeSyncTick, setIframeSyncTick] = useState(0);
-  const [showHint, setShowHint] = useState(true);
   const [hasUnsaved, setHasUnsaved] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   /** Maps relative file paths to preview URLs (raw GitHub) for instant display after upload */
@@ -588,94 +587,43 @@ export default function DashboardPage() {
   /* ── Render ── */
 
   return (
-    <div className="h-dvh flex flex-col bg-[var(--cms-bg)] overflow-hidden">
+    <div className="h-dvh flex flex-col bg-black overflow-hidden relative">
 
-      {/* ═══ Header ═══ */}
-      <header className="flex-none border-b border-[var(--cms-border)] bg-[var(--cms-surface)]">
-        <div className="flex items-center justify-between px-3 h-11 gap-2">
-
-          {/* Left: name + page tabs */}
-          <div className="flex items-center gap-3 min-w-0">
-            <h1 className="text-sm font-semibold text-[var(--cms-text)] truncate max-w-[140px]">
-              {session && typeof session === "object" && session.name ? session.name : "Édition"}
-            </h1>
-
-            {showPageTabs && (
-              <div className="flex items-center rounded-md bg-[var(--cms-bg)] p-0.5 gap-0.5">
-                {pageOrder.map((slug) => (
-                  <button
-                    key={slug}
-                    onClick={() => setCurrentPageSlug(slug)}
-                    className={`rounded px-2.5 py-1 text-[11px] font-medium transition-all ${
-                      slug === currentPageSlug
-                        ? "bg-[var(--cms-surface)] text-[var(--cms-text)] shadow-sm"
-                        : "text-[var(--cms-text-muted)] hover:text-[var(--cms-text)]"
-                    }`}
-                  >
-                    {pageLabel(slug)}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Right: undo/redo + status + publish + actions */}
-          <div className="flex items-center gap-1.5">
-
-            {/* Undo / Redo */}
-            <div className="flex items-center rounded-md border border-[var(--cms-border)] bg-[var(--cms-bg)] p-0.5">
-              <button type="button" onClick={handleUndo} disabled={historyIndex <= 0} className="rounded p-1 text-[var(--cms-text-muted)] hover:text-[var(--cms-text)] disabled:opacity-30 disabled:pointer-events-none" title="Annuler (Ctrl+Z)">
-                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
-              </button>
-              <button type="button" onClick={handleRedo} disabled={historyIndex >= history.length - 1} className="rounded p-1 text-[var(--cms-text-muted)] hover:text-[var(--cms-text)] disabled:opacity-30 disabled:pointer-events-none" title="Rétablir (Ctrl+Y)">
-                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" /></svg>
-              </button>
-            </div>
-
-            {/* Status */}
-            {publishMessage && (
-              <span className={`text-[11px] font-medium ${publishMessage === "Publié" ? "text-[var(--cms-success)]" : "text-[var(--cms-error)]"}`}>
-                {publishMessage === "Publié" ? "✓ Publié" : publishMessage}
-              </span>
-            )}
-            {!publishMessage && hasUnsaved && (
-              <span className="text-[11px] text-[var(--cms-text-muted)]">Modifié</span>
-            )}
-
-            {/* Publish */}
-            <button
-              type="button"
-              onClick={handlePublish}
-              disabled={publishing}
-              className="rounded-md bg-white px-3 py-1 text-xs font-semibold text-black transition-opacity hover:opacity-90 disabled:opacity-50 disabled:pointer-events-none"
-            >
-              {publishing ? (
-                <span className="inline-flex items-center gap-1.5">
-                  <svg className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-                  Enregistrement…
-                </span>
-              ) : "Publier"}
-            </button>
-
-            {/* View site */}
-            {siteUrl && (
-              <a href={siteUrl} target="_blank" rel="noopener noreferrer" className="rounded p-1.5 text-[var(--cms-text-muted)] hover:text-[var(--cms-text)] transition-colors" title="Voir le site">
-                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-              </a>
-            )}
-
-            {/* Logout */}
-            <button
-              type="button"
-              onClick={async () => { await fetch("/api/auth/logout", { method: "POST" }); router.push("/"); router.refresh(); }}
-              className="rounded p-1.5 text-[var(--cms-text-muted)] hover:text-[var(--cms-text)] transition-colors text-xs"
-              title="Déconnexion"
-            >
-              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-            </button>
-          </div>
+      {/* ═══ Floating CMS bar ═══ */}
+      <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-1.5 px-2 py-1.5 rounded-xl bg-[rgba(15,15,18,.92)] border border-[rgba(255,255,255,.1)] backdrop-blur-2xl shadow-[0_8px_32px_rgba(0,0,0,.5)]">
+        <div className="flex items-center rounded-lg border border-[rgba(255,255,255,.08)] bg-[rgba(255,255,255,.04)] p-0.5">
+          <button type="button" onClick={handleUndo} disabled={historyIndex <= 0} className="rounded p-1.5 text-[rgba(255,255,255,.5)] hover:text-white disabled:opacity-25 disabled:pointer-events-none transition-colors" title="Annuler (Ctrl+Z)">
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
+          </button>
+          <button type="button" onClick={handleRedo} disabled={historyIndex >= history.length - 1} className="rounded p-1.5 text-[rgba(255,255,255,.5)] hover:text-white disabled:opacity-25 disabled:pointer-events-none transition-colors" title="Rétablir (Ctrl+Y)">
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" /></svg>
+          </button>
         </div>
-      </header>
+
+        {publishMessage && (
+          <span className={`text-[11px] font-medium px-1 ${publishMessage === "Publié" ? "text-emerald-400" : "text-red-400"}`}>
+            {publishMessage === "Publié" ? "✓" : publishMessage}
+          </span>
+        )}
+        {!publishMessage && hasUnsaved && (
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" title="Modifications non publiées" />
+        )}
+
+        <button
+          type="button"
+          onClick={handlePublish}
+          disabled={publishing}
+          className="rounded-lg bg-white px-3 py-1 text-[11px] font-bold text-black tracking-wide uppercase transition-opacity hover:opacity-90 disabled:opacity-50 disabled:pointer-events-none"
+        >
+          {publishing ? "…" : "Publier"}
+        </button>
+
+        {siteUrl && (
+          <a href={siteUrl} target="_blank" rel="noopener noreferrer" className="rounded p-1.5 text-[rgba(255,255,255,.45)] hover:text-white transition-colors" title="Voir le site">
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+          </a>
+        )}
+      </div>
 
       {/* ═══ Hidden file inputs ═══ */}
       <input id="cms-upload-hero" type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="sr-only" onChange={(e) => onImageFileChange(e, "hero")} />
@@ -712,19 +660,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ═══ Instruction hint (dismissible) ═══ */}
-      {showHint && siteUrl && (
-        <div className="flex-none flex items-center justify-between gap-4 px-3 py-1 bg-[#111] border-b border-[var(--cms-border)]">
-          <p className="text-[10px] text-[var(--cms-text-muted)] leading-relaxed">
-            Cliquez sur les <strong className="text-[var(--cms-text)]">textes</strong> pour les modifier
-            &nbsp;·&nbsp; Cliquez sur les <strong className="text-[var(--cms-text)]">images</strong> pour les remplacer
-            &nbsp;·&nbsp; <strong className="text-[var(--cms-text)]">Shift + clic</strong> sur une vidéo pour la remplacer
-            &nbsp;·&nbsp; <strong className="text-[var(--cms-text)]">Ctrl + S</strong> pour publier
-          </p>
-          <button onClick={() => setShowHint(false)} className="text-[var(--cms-text-muted)] hover:text-[var(--cms-text)] text-sm leading-none shrink-0 px-1" title="Fermer">×</button>
-        </div>
-      )}
-
       {/* ═══ Main content: iframe or setup prompt ═══ */}
       {siteUrl && iframeSrc ? (
         <iframe
@@ -732,7 +667,7 @@ export default function DashboardPage() {
           ref={iframeRef}
           src={iframeSrc}
           title="Aperçu du site"
-          className="flex-1 w-full border-0 min-h-0 bg-black"
+          className="flex-1 w-full border-0 min-h-0 bg-black" style={{height: '100dvh'}}
           allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
         />
       ) : (

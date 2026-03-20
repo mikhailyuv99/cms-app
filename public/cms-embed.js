@@ -116,6 +116,14 @@
 
       var target = e.target.closest("[data-cms-ctrl]");
       if (target) {
+        if (selectedEl === target) {
+          var cfg2 = cmsControls.get(target);
+          if (cfg2 && cfg2.isCard) {
+            var textEl = e.target.closest(".service-card__title, .service-card__description");
+            if (textEl) { textEl.contentEditable = "true"; textEl.focus(); textEl.classList.add("cms-editing"); }
+          }
+          return;
+        }
         e.preventDefault();
         e.stopPropagation();
         select(target);
@@ -199,11 +207,6 @@
       addTbBtn(ICON_IMAGE, "Miniature", function () {
         postToParent({ type: "CMS_UPLOAD_REQUEST", source: "cms-site", uploadKey: "videoPlay-poster" });
       });
-    }
-
-    if (cfg.canResize) {
-      addTbBtn(null, "A+", function () { changeSize(el, cfg, 0.1); }, false, "cms-tb-txt");
-      addTbBtn(null, "A\u2212", function () { changeSize(el, cfg, -0.1); }, false, "cms-tb-txt");
     }
 
     if (cfg.isCard) {
@@ -299,7 +302,11 @@
     if (!cfg) return;
     var base = parseFloat(el.dataset.cmsBaseSize);
     if (!base) { el.style.fontSize = ""; base = parseFloat(window.getComputedStyle(el).fontSize); el.dataset.cmsBaseSize = base; }
-    resizeState = { el: el, cfg: cfg, sy: cy, startSize: parseFloat(el.dataset.cmsSize) || 1, base: base };
+    var rect = el.getBoundingClientRect();
+    var centerX = rect.left + rect.width / 2;
+    var centerY = rect.top + rect.height / 2;
+    var initDist = Math.sqrt(Math.pow(cx - centerX, 2) + Math.pow(cy - centerY, 2)) || 1;
+    resizeState = { el: el, cfg: cfg, startSize: parseFloat(el.dataset.cmsSize) || 1, base: base, centerX: centerX, centerY: centerY, initDist: initDist };
     document.body.style.userSelect = "none";
     document.body.style.cursor = "nwse-resize";
   }
@@ -349,16 +356,26 @@
     el.style.fontSize = (base * size) + "px";
   }
 
-  function applyCardTransform(card) {
-    var px = parseFloat(card.dataset.cmsPosX) || 0;
-    var py = parseFloat(card.dataset.cmsPosY) || 0;
-    var sz = parseFloat(card.dataset.cmsSize) || 1;
+  function applyMediaSize(el, size) {
+    if (!el) return;
+    el.dataset.cmsSize = size || 1;
+    if (!size || size === 1) return;
+    el.style.transform = "scale(" + size + ")";
+    el.style.transformOrigin = "center center";
+    el.style.setProperty("--cms-translate", "scale(" + size + ")");
+  }
+
+  function applyCardTransform(el) {
+    var px = parseFloat(el.dataset.cmsPosX) || 0;
+    var py = parseFloat(el.dataset.cmsPosY) || 0;
+    var sz = parseFloat(el.dataset.cmsSize) || 1;
     var t = "";
     if (px || py) t += "translate(" + px + "px, " + py + "px) ";
     if (sz !== 1) t += "scale(" + sz + ")";
     t = t.trim();
-    card.style.transform = t || "";
-    card.style.setProperty("--cms-translate", t || "none");
+    el.style.transform = t || "";
+    el.style.setProperty("--cms-translate", t || "none");
+    el.style.transformOrigin = "center center";
   }
 
   /* ── undo stack ── */
@@ -424,7 +441,7 @@
   function onSectionResizeMove(cy) {
     if (!sectionResizeState) return;
     var delta = cy - sectionResizeState.sy;
-    var newH = Math.max(100, sectionResizeState.startH + delta);
+    var newH = Math.max(50, sectionResizeState.startH + delta);
     sectionResizeState.sec.style.minHeight = newH + "px";
   }
   function onSectionResizeEnd() {
@@ -580,7 +597,8 @@
     applySize(document.getElementById("hero-title"), d.titleSize);
     applySize(document.getElementById("hero-subtitle"), d.subtitleSize);
     applySize(document.querySelector(".hero__badge"), d.badgeSize);
-    registerControl(document.getElementById("hero-media-zone"), { canMove: true, uploadKey: "hero", cropContainer: "hero-media", cropSection: "hero", cropPosField: "imagePosition" });
+    applyMediaSize(document.getElementById("hero-media-zone"), d.mediaSize);
+    registerControl(document.getElementById("hero-media-zone"), { canMove: true, canResize: true, isMediaContainer: true, uploadKey: "hero", cropContainer: "hero-media", cropSection: "hero", cropPosField: "imagePosition", section: "hero", sizeField: "mediaSize" });
     registerControl(document.getElementById("hero-title"), { canMove: true, canResize: true, section: "hero", posField: "titlePosition", sizeField: "titleSize" });
     registerControl(document.getElementById("hero-subtitle"), { canMove: true, canResize: true, section: "hero", posField: "subtitlePosition", sizeField: "subtitleSize" });
     registerControl(document.querySelector(".hero__badge"), { canMove: true, canResize: true, section: "hero", posField: "badgePosition", sizeField: "badgeSize" });
@@ -592,7 +610,7 @@
     if (c) { c.innerHTML = ""; if (d.video) { var v = document.createElement("video"); v.src = resolveUrl(d.video); v.autoplay = true; v.muted = true; v.loop = true; v.playsInline = true; v.preload = "auto"; v.setAttribute("playsinline", ""); applyCrop(v, d.videoPosition); c.appendChild(v); v.play().catch(function () {}); } }
     applyPos("#video-loop-title", d.titlePosition);
     applySize(document.getElementById("video-loop-title"), d.titleSize);
-    registerControl(document.getElementById("videoLoop"), { canMove: true, uploadKey: "videoLoop-video", cropContainer: "video-loop-media", cropSection: "videoLoop", cropPosField: "videoPosition" });
+    registerControl(document.getElementById("videoLoop"), { canMove: true, canResize: true, isMediaContainer: true, uploadKey: "videoLoop-video", cropContainer: "video-loop-media", cropSection: "videoLoop", cropPosField: "videoPosition", section: "videoLoop", sizeField: "mediaSize" });
     registerControl(document.getElementById("video-loop-title"), { canMove: true, canResize: true, section: "videoLoop", posField: "titlePosition", sizeField: "titleSize" });
   }
 
@@ -601,11 +619,12 @@
     var lbl = document.querySelector(".video-play__label"); if (lbl) lbl.textContent = d.label || "Showreel";
     var c = document.getElementById("video-play-media");
     if (c) { var glow = c.querySelector(".video-play__glow"); c.innerHTML = ""; if (glow) c.appendChild(glow); if (d.video) { var v = document.createElement("video"); v.src = resolveUrl(d.video); v.controls = true; v.playsInline = true; v.preload = "auto"; v.setAttribute("playsinline", ""); if (d.poster) v.poster = resolveUrl(d.poster); applyCrop(v, d.videoPosition); c.appendChild(v); } }
+    applyMediaSize(document.getElementById("video-play-media"), d.mediaSize);
     applyPos("#video-play-media", d.mediaPosition);
     applyPos("#video-play-title", d.titlePosition); applyPos(".video-play__label", d.labelPosition);
     applySize(document.getElementById("video-play-title"), d.titleSize);
     applySize(document.querySelector(".video-play__label"), d.labelSize);
-    registerControl(document.getElementById("video-play-media"), { canMove: true, uploadKey: "videoPlay-video", hasPoster: true, section: "videoPlay", posField: "mediaPosition" });
+    registerControl(document.getElementById("video-play-media"), { canMove: true, canResize: true, isMediaContainer: true, uploadKey: "videoPlay-video", hasPoster: true, section: "videoPlay", posField: "mediaPosition", sizeField: "mediaSize" });
     registerControl(document.getElementById("video-play-title"), { canMove: true, canResize: true, section: "videoPlay", posField: "titlePosition", sizeField: "titleSize" });
     registerControl(document.querySelector(".video-play__label"), { canMove: true, canResize: true, section: "videoPlay", posField: "labelPosition", sizeField: "labelSize" });
   }
@@ -619,7 +638,7 @@
     applySize(document.getElementById("about-title"), d.titleSize);
     applySize(document.getElementById("about-text"), d.textSize);
     applySize(document.querySelector(".about__eyebrow"), d.eyebrowSize);
-    registerControl(document.getElementById("about-media-zone"), { canMove: true, uploadKey: "about", cropContainer: "about-media", cropSection: "about", cropPosField: "imagePosition" });
+    registerControl(document.getElementById("about-media-zone"), { canMove: true, canResize: true, isMediaContainer: true, uploadKey: "about", cropContainer: "about-media", cropSection: "about", cropPosField: "imagePosition", section: "about", sizeField: "mediaSize" });
     registerControl(document.getElementById("about-title"), { canMove: true, canResize: true, section: "about", posField: "titlePosition", sizeField: "titleSize" });
     registerControl(document.getElementById("about-text"), { canMove: true, canResize: true, section: "about", posField: "textPosition", sizeField: "textSize" });
     registerControl(document.querySelector(".about__eyebrow"), { canMove: true, canResize: true, section: "about", posField: "eyebrowPosition", sizeField: "eyebrowSize" });
@@ -758,12 +777,12 @@
     showSnapGrid(parent || card.parentElement);
   }
 
-  document.addEventListener("mousemove", function (e) { if (dragState) onDragMove(e.clientX, e.clientY); if (resizeState) onResizeMove(e.clientY); });
+  document.addEventListener("mousemove", function (e) { if (dragState) onDragMove(e.clientX, e.clientY); if (resizeState) onResizeMove(e.clientX, e.clientY); });
   document.addEventListener("touchmove", function (e) {
     if (!dragState && !resizeState) return;
     if (e.touches.length !== 1) return; e.preventDefault();
     if (dragState) onDragMove(e.touches[0].clientX, e.touches[0].clientY);
-    if (resizeState) onResizeMove(e.touches[0].clientY);
+    if (resizeState) onResizeMove(e.touches[0].clientX, e.touches[0].clientY);
   }, { passive: false });
   document.addEventListener("mouseup", onDragEnd);
   document.addEventListener("touchend", onDragEnd);
@@ -798,16 +817,18 @@
     }
   }
 
-  function onResizeMove(cy) {
+  function onResizeMove(cx, cy) {
     if (!resizeState) return;
-    var dy = resizeState.sy - cy;
-    var next = Math.round(clamp(resizeState.startSize + dy * 0.005, 0.5, 2.5) * 10) / 10;
+    var dist = Math.sqrt(Math.pow(cx - resizeState.centerX, 2) + Math.pow(cy - resizeState.centerY, 2));
+    var ratio = dist / resizeState.initDist;
+    var next = Math.round(clamp(resizeState.startSize * ratio, 0.3, 3) * 100) / 100;
     resizeState.el.dataset.cmsSize = next;
-    if (resizeState.cfg && resizeState.cfg.isCard) {
+    if (resizeState.cfg && (resizeState.cfg.isCard || resizeState.cfg.isMediaContainer)) {
       applyCardTransform(resizeState.el);
     } else {
       resizeState.el.style.fontSize = (resizeState.base * next) + "px";
     }
+    resizeState.el.offsetHeight;
     positionToolbar(); positionHandles();
   }
 
@@ -988,12 +1009,15 @@
       '.cms-sec-btn:hover { background: rgba(255,255,255,.15); color: #fff; }',
 
       '.cms-sec-resize {',
-      '  position: absolute; bottom: 0; left: 10%; width: 80%; height: 6px;',
+      '  position: absolute; bottom: -3px; left: 0; width: 100%; height: 8px;',
       '  z-index: 500; cursor: ns-resize; opacity: 0; transition: opacity .15s;',
-      '  background: linear-gradient(90deg, transparent 0%, rgba(196,165,90,.5) 30%, rgba(196,165,90,.5) 70%, transparent 100%);',
-      '  border-radius: 3px; pointer-events: none;',
+      '  background: transparent; pointer-events: none;',
       '}',
-      '.cms-sec-resize:hover { background: linear-gradient(90deg, transparent 0%, rgba(196,165,90,.8) 30%, rgba(196,165,90,.8) 70%, transparent 100%); }',
+      '.cms-sec-resize::after {',
+      '  content: ""; position: absolute; bottom: 3px; left: 20%; width: 60%; height: 2px;',
+      '  background: rgba(196,165,90,.4); border-radius: 1px; transition: background .15s;',
+      '}',
+      '.cms-sec-resize:hover::after { background: rgba(196,165,90,.8); }',
 
       '.service-card { position: relative; }',
       '.service-card:hover { transform: var(--cms-translate, none) !important; }',
