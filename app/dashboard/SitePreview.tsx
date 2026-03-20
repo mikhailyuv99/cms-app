@@ -282,10 +282,9 @@ function pageLabel(slug: string): string {
   return slug.charAt(0).toUpperCase() + slug.slice(1).replace(/-/g, " ");
 }
 
-/** Absolute text overlay; skip when absent or ~center so layout matches original site (flow). */
-function resolvedContentPositionStyle(pos?: Position): React.CSSProperties | undefined {
+/** Same as mockup-site js applyContentPosition: only when JSON has contentPosition. */
+function applyContentPositionStyle(pos?: Position): React.CSSProperties | undefined {
   if (!pos) return undefined;
-  if (Math.abs(pos.x - 50) < 0.05 && Math.abs(pos.y - 50) < 0.05) return undefined;
   return {
     position: "absolute",
     left: `${pos.x}%`,
@@ -319,7 +318,8 @@ export default function SitePreview({
   const sectionOrder = getEffectiveSectionOrder(content);
 
   const heroRef = useRef<HTMLElement>(null);
-  const aboutRef = useRef<HTMLElement>(null);
+  /** Containing block for about text = .about__grid (mockup applyContentPosition parent) */
+  const aboutGridRef = useRef<HTMLElement>(null);
   const videoLoopRef = useRef<HTMLElement>(null);
   const videoPlayRef = useRef<HTMLElement>(null);
   const contactRef = useRef<HTMLElement>(null);
@@ -348,7 +348,7 @@ export default function SitePreview({
   }, [mediaPanSection, content.about?.video]);
 
   const heroTextDrag = useTextDragHandle(heroRef, content.hero?.contentPosition, (p) => onContentPosition("hero", p));
-  const aboutTextDrag = useTextDragHandle(aboutRef, content.about?.contentPosition, (p) => onContentPosition("about", p));
+  const aboutTextDrag = useTextDragHandle(aboutGridRef, content.about?.contentPosition, (p) => onContentPosition("about", p));
   const videoLoopTextDrag = useTextDragHandle(videoLoopRef, content.videoLoop?.contentPosition, (p) => onContentPosition("videoLoop", p));
   const videoPlayTextDrag = useTextDragHandle(videoPlayRef, content.videoPlay?.contentPosition, (p) => onContentPosition("videoPlay", p));
   const contactTextDrag = useTextDragHandle(contactRef, content.contact?.contentPosition, (p) => onContentPosition("contact", p));
@@ -536,7 +536,7 @@ export default function SitePreview({
           </div>
         </div>
         {heroTextDrag.isDragging && <AlignmentGuides activeGuides={heroTextDrag.activeGuides} />}
-        <div className="preview-hero__content preview-text-block" style={resolvedContentPositionStyle(content.hero.contentPosition)}>
+        <div className="preview-hero__content preview-text-block" style={applyContentPositionStyle(content.hero.contentPosition)}>
           {textDragBtn(heroTextDrag)}
           <AutoTextarea
             className="preview-input preview-hero__title"
@@ -570,8 +570,8 @@ export default function SitePreview({
     ) : null,
 
     about: content.about ? (
-      <section key="about" className="preview-about" ref={aboutRef as React.Ref<HTMLElement>}>
-        <div className="preview-about__grid">
+      <section key="about" className="preview-about">
+        <div className="preview-about__grid" ref={aboutGridRef as React.Ref<HTMLDivElement>}>
           <div
             className="preview-about__media"
             ref={aboutMediaRef}
@@ -631,7 +631,7 @@ export default function SitePreview({
             </div>
           </div>
           {aboutTextDrag.isDragging && <AlignmentGuides activeGuides={aboutTextDrag.activeGuides} />}
-          <div className="preview-about__text preview-text-block" style={resolvedContentPositionStyle(content.about.contentPosition)}>
+          <div className="preview-about__text preview-text-block" style={applyContentPositionStyle(content.about.contentPosition)}>
             {textDragBtn(aboutTextDrag)}
             <AutoTextarea
               className="preview-input preview-about__title"
@@ -657,7 +657,7 @@ export default function SitePreview({
     services: content.services ? (
       <section key="services" className="preview-services" ref={servicesRef as React.Ref<HTMLElement>} style={{ background: theme.servicesBg }}>
         {servicesTextDrag.isDragging && <AlignmentGuides activeGuides={servicesTextDrag.activeGuides} />}
-        <div className="preview-text-block" style={resolvedContentPositionStyle(content.services.contentPosition)}>
+        <div className="preview-text-block" style={applyContentPositionStyle(content.services.contentPosition)}>
           {textDragBtn(servicesTextDrag)}
           <AutoTextarea
             className="preview-input preview-services__title"
@@ -735,7 +735,7 @@ export default function SitePreview({
           )}
         </div>
         {videoLoopTextDrag.isDragging && <AlignmentGuides activeGuides={videoLoopTextDrag.activeGuides} />}
-        <div className="preview-text-block" style={resolvedContentPositionStyle(content.videoLoop.contentPosition)}>
+        <div className="preview-text-block" style={applyContentPositionStyle(content.videoLoop.contentPosition)}>
           {textDragBtn(videoLoopTextDrag)}
           <AutoTextarea
             className="preview-input preview-video-loop__title"
@@ -757,7 +757,7 @@ export default function SitePreview({
     videoPlay: content.videoPlay ? (
       <section key="videoPlay" className="preview-video-play" ref={videoPlayRef as React.Ref<HTMLElement>}>
         {videoPlayTextDrag.isDragging && <AlignmentGuides activeGuides={videoPlayTextDrag.activeGuides} />}
-        <div className="preview-text-block" style={resolvedContentPositionStyle(content.videoPlay.contentPosition)}>
+        <div className="preview-text-block" style={applyContentPositionStyle(content.videoPlay.contentPosition)}>
           {textDragBtn(videoPlayTextDrag)}
           <AutoTextarea
             className="preview-input preview-video-play__title"
@@ -798,7 +798,8 @@ export default function SitePreview({
     contact: content.contact ? (
       <section key="contact" className="preview-contact" ref={contactRef as React.Ref<HTMLElement>}>
         {contactTextDrag.isDragging && <AlignmentGuides activeGuides={contactTextDrag.activeGuides} />}
-        <div className="preview-text-block" style={resolvedContentPositionStyle(content.contact.contentPosition)}>
+        {/* Mockup: applyContentPosition ne cible que .contact__title, pas tout le bloc */}
+        <div className="preview-text-block" style={applyContentPositionStyle(content.contact.contentPosition)}>
           {textDragBtn(contactTextDrag)}
           <AutoTextarea
             className="preview-input preview-contact__title"
@@ -808,34 +809,34 @@ export default function SitePreview({
             placeholder="Titre contact"
             aria-label="Titre contact"
           />
-          <AutoTextarea
-            className="preview-input preview-contact__text"
-            style={{ color: theme.contactText }}
-            value={content.contact.text}
-            onChange={(v) => onContact("text", v)}
-            placeholder="Texte"
-            aria-label="Texte contact"
-          />
-          <span className="preview-contact__cta" style={{ background: theme.contactButtonBg, color: theme.contactButtonText }}>
-            <input
-              className="preview-input preview-contact__cta-input"
-              value={content.contact.buttonLabel}
-              onChange={(e) => onContact("buttonLabel", e.target.value)}
-              placeholder="Bouton"
-              aria-label="Libellé bouton"
-              style={{ color: theme.contactButtonText }}
-            />
-          </span>
-          <input
-            type="email"
-            className="preview-input preview-contact__email"
-            style={{ color: theme.contactText }}
-            value={content.contact.email}
-            onChange={(e) => onContact("email", e.target.value)}
-            placeholder="Email"
-            aria-label="Email contact"
-          />
         </div>
+        <AutoTextarea
+          className="preview-input preview-contact__text"
+          style={{ color: theme.contactText }}
+          value={content.contact.text}
+          onChange={(v) => onContact("text", v)}
+          placeholder="Texte"
+          aria-label="Texte contact"
+        />
+        <span className="preview-contact__cta" style={{ background: theme.contactButtonBg, color: theme.contactButtonText }}>
+          <input
+            className="preview-input preview-contact__cta-input"
+            value={content.contact.buttonLabel}
+            onChange={(e) => onContact("buttonLabel", e.target.value)}
+            placeholder="Bouton"
+            aria-label="Libellé bouton"
+            style={{ color: theme.contactButtonText }}
+          />
+        </span>
+        <input
+          type="email"
+          className="preview-input preview-contact__email"
+          style={{ color: theme.contactText }}
+          value={content.contact.email}
+          onChange={(e) => onContact("email", e.target.value)}
+          placeholder="Email"
+          aria-label="Email contact"
+        />
       </section>
     ) : null,
   };
