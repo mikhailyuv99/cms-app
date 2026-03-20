@@ -399,33 +399,39 @@ export default function DashboardPage() {
     const h: Record<string, string> = { Authorization: `Bearer ${token}`, Accept: "application/vnd.github.v3+json", "Content-Type": "application/json" };
     const api = `https://api.github.com/repos/${owner}/${repo}`;
 
-    const repoRes = await fetch(api, { headers: h });
-    if (!repoRes.ok) throw new Error("Accès dépôt impossible");
-    const { default_branch: branch } = await repoRes.json();
+    setUploadProgress(0.3);
 
-    const blobRes = await xhrPost(`${api}/git/blobs`, JSON.stringify({ content: base64, encoding: "base64" }), h, (r) => setUploadProgress(r));
-    if (!blobRes.ok) throw new Error("Erreur blob");
-    const { sha: blobSha } = (await blobRes.json()) as { sha: string };
+    let existingSha: string | undefined;
+    try {
+      const existing = await fetch(`${api}/contents/${filePath}`, { headers: h });
+      if (existing.ok) {
+        const data = await existing.json();
+        existingSha = data.sha;
+      }
+    } catch { /* file doesn't exist yet */ }
 
-    const refRes = await fetch(`${api}/git/ref/heads/${branch}`, { headers: h });
-    if (!refRes.ok) throw new Error("Branche introuvable");
-    const headSha: string = (await refRes.json()).object.sha;
+    setUploadProgress(0.5);
 
-    const commitRes = await fetch(`${api}/git/commits/${headSha}`, { headers: h });
-    if (!commitRes.ok) throw new Error("Commit introuvable");
-    const baseTree: string = (await commitRes.json()).tree.sha;
+    const putRes = await fetch(`${api}/contents/${filePath}`, {
+      method: "PUT",
+      headers: h,
+      body: JSON.stringify({
+        message: `Média ${filePath} via CMS`,
+        content: base64,
+        ...(existingSha ? { sha: existingSha } : {}),
+      }),
+    });
 
-    const treeRes = await fetch(`${api}/git/trees`, { method: "POST", headers: h, body: JSON.stringify({ base_tree: baseTree, tree: [{ path: filePath, mode: "100644", type: "blob", sha: blobSha }] }) });
-    if (!treeRes.ok) throw new Error("Arbre impossible");
-    const newTree: string = (await treeRes.json()).sha;
+    if (!putRes.ok) {
+      const errBody = await putRes.text().catch(() => "");
+      throw new Error(`Upload GitHub échoué (${putRes.status}): ${errBody.slice(0, 200)}`);
+    }
 
-    const cRes = await fetch(`${api}/git/commits`, { method: "POST", headers: h, body: JSON.stringify({ message: `Média ${filePath} via CMS`, tree: newTree, parents: [headSha] }) });
-    if (!cRes.ok) throw new Error("Commit impossible");
-    const newCommit: string = (await cRes.json()).sha;
-
-    await fetch(`${api}/git/refs/heads/${branch}`, { method: "PATCH", headers: h, body: JSON.stringify({ sha: newCommit }) });
-
-    const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${newCommit}/${filePath}`;
+    setUploadProgress(0.9);
+    const result = await putRes.json();
+    const commitSha: string = result.commit?.sha ?? "";
+    const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${commitSha}/${filePath}`;
+    setUploadProgress(1);
     return { path: filePath, rawUrl };
   }
 
@@ -492,27 +498,28 @@ export default function DashboardPage() {
     let uploadedPath: string | null = null;
     let uploadedRawUrl: string | null = null;
 
-    try {
-      const form = new FormData();
-      form.append("file", videoFile);
-      form.append("key", key);
-      const res = await xhrPost("/api/upload-video", form, undefined, (r) => setUploadProgress(r));
-      if (res.ok) {
-        const data = (await res.json()) as { path: string; rawUrl: string };
-        uploadedPath = data.path;
-        uploadedRawUrl = data.rawUrl;
-      }
-    } catch { /* server upload failed, try direct */ }
+    const ext = videoFile.type === "video/webm" ? "webm" : "mp4";
+    const filePath = `images/${key}.${ext}`;
 
-    if (!uploadedPath) {
+    try {
+      const { path, rawUrl } = await uploadDirectToGitHub(videoFile, filePath);
+      uploadedPath = path;
+      uploadedRawUrl = rawUrl;
+    } catch (directErr) {
       try {
-        const ext = videoFile.type === "video/webm" ? "webm" : "mp4";
-        const filePath = `images/${key}.${ext}`;
-        const { path, rawUrl } = await uploadDirectToGitHub(videoFile, filePath);
-        uploadedPath = path;
-        uploadedRawUrl = rawUrl;
-      } catch (err) {
-        setPublishMessage(`Upload vidéo échoué: ${err instanceof Error ? err.message : "Vérifiez les permissions du token GitHub."}`);
+        const form = new FormData();
+        form.append("file", videoFile);
+        form.append("key", key);
+        const res = await xhrPost("/api/upload-video", form, undefined, (r) => setUploadProgress(r));
+        if (res.ok) {
+          const data = (await res.json()) as { path: string; rawUrl: string };
+          uploadedPath = data.path;
+          uploadedRawUrl = data.rawUrl;
+        }
+      } catch { /* both failed */ }
+
+      if (!uploadedPath) {
+        setPublishMessage(`Upload vidéo échoué: ${directErr instanceof Error ? directErr.message : "Vérifiez les permissions du token GitHub."}`);
         setUploadingMedia(null);
         return;
       }
