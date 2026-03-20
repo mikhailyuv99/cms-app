@@ -81,7 +81,6 @@
 .preview-hero {
   position: relative;
   min-height: 85vh;
-  min-height: 85dvh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -108,7 +107,7 @@
 }
 .preview-hero__content {
   position: relative;
-  z-index: 2;
+  z-index: 1;
   text-align: center;
   padding: 2rem;
   max-width: 42rem;
@@ -206,7 +205,6 @@
 .preview-video-loop {
   position: relative;
   min-height: 50vh;
-  min-height: 50dvh;
   display: flex;
   align-items: center;
   justify-content: center;

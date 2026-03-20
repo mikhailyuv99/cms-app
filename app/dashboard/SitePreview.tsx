@@ -161,7 +161,9 @@ function useImageDrag(
         return;
       e.preventDefault();
       e.stopPropagation();
-      (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+      // Capture on container so pointermove works when dragging from a child <video>
+      const el = e.currentTarget as HTMLElement;
+      el.setPointerCapture?.(e.pointerId);
       dragging.current = true;
       startRef.current = { px: e.clientX, py: e.clientY, ox: x, oy: y };
     },
@@ -280,8 +282,10 @@ function pageLabel(slug: string): string {
   return slug.charAt(0).toUpperCase() + slug.slice(1).replace(/-/g, " ");
 }
 
-function contentPosStyle(pos?: Position): React.CSSProperties | undefined {
+/** Absolute text overlay; skip when absent or ~center so layout matches original site (flow). */
+function resolvedContentPositionStyle(pos?: Position): React.CSSProperties | undefined {
   if (!pos) return undefined;
+  if (Math.abs(pos.x - 50) < 0.05 && Math.abs(pos.y - 50) < 0.05) return undefined;
   return {
     position: "absolute",
     left: `${pos.x}%`,
@@ -321,15 +325,11 @@ export default function SitePreview({
   const contactRef = useRef<HTMLElement>(null);
   const servicesRef = useRef<HTMLElement>(null);
 
-  const heroMediaRef = useRef<HTMLDivElement>(null);
-  const aboutMediaRef = useRef<HTMLDivElement>(null);
   const videoLoopMediaRef = useRef<HTMLDivElement>(null);
-  const videoPlayMediaRef = useRef<HTMLDivElement>(null);
 
-  const [mediaPanSection, setMediaPanSection] = useState<SectionId | null>(null);
-  const toggleMediaPan = useCallback((id: SectionId) => {
-    setMediaPanSection((prev) => (prev === id ? null : id));
-  }, []);
+  /** Pan média dans le cadre : uniquement section vidéo en boucle (comme demandé). */
+  const [videoLoopPanActive, setVideoLoopPanActive] = useState(false);
+  const toggleVideoLoopPan = useCallback(() => setVideoLoopPanActive((v) => !v), []);
 
   const heroTextDrag = useTextDragHandle(heroRef, content.hero?.contentPosition, (p) => onContentPosition("hero", p));
   const aboutTextDrag = useTextDragHandle(aboutRef, content.about?.contentPosition, (p) => onContentPosition("about", p));
@@ -338,10 +338,12 @@ export default function SitePreview({
   const contactTextDrag = useTextDragHandle(contactRef, content.contact?.contentPosition, (p) => onContentPosition("contact", p));
   const servicesTextDrag = useTextDragHandle(servicesRef, content.services?.contentPosition, (p) => onContentPosition("services", p));
 
-  const heroImgDrag = useImageDrag(heroMediaRef, content.hero?.imagePosition, (p) => onImagePosition("hero", p), mediaPanSection === "hero");
-  const aboutImgDrag = useImageDrag(aboutMediaRef, content.about?.imagePosition, (p) => onImagePosition("about", p), mediaPanSection === "about");
-  const videoLoopImgDrag = useImageDrag(videoLoopMediaRef, content.videoLoop?.imagePosition, (p) => onImagePosition("videoLoop", p), mediaPanSection === "videoLoop");
-  const videoPlayImgDrag = useImageDrag(videoPlayMediaRef, content.videoPlay?.imagePosition, (p) => onImagePosition("videoPlay", p), mediaPanSection === "videoPlay");
+  const videoLoopImgDrag = useImageDrag(
+    videoLoopMediaRef,
+    content.videoLoop?.imagePosition,
+    (p) => onImagePosition("videoLoop", p),
+    videoLoopPanActive,
+  );
 
   const [dragOverSection, setDragOverSection] = useState<number | null>(null);
   const [dragOverCard, setDragOverCard] = useState<number | null>(null);
@@ -431,16 +433,15 @@ export default function SitePreview({
     return `${pos?.x ?? 50}% ${pos?.y ?? 50}%`;
   }
 
-  function mediaPanBtn(id: SectionId) {
-    const active = mediaPanSection === id;
+  function videoLoopPanButton() {
     return (
       <button
         type="button"
-        className={`preview-media-btn preview-media-pan-btn${active ? " active" : ""}`}
-        title="Activer le déplacement du média dans le cadre (cliquer puis glisser sur l’image ou la vidéo)"
-        aria-label="Déplacer le média dans le cadre"
-        aria-pressed={active}
-        onClick={() => toggleMediaPan(id)}
+        className={`preview-media-btn preview-media-pan-btn${videoLoopPanActive ? " active" : ""}`}
+        title="Vidéo en boucle : activer puis cliquer-glisser sur la vidéo pour recadrer"
+        aria-label="Déplacer la vidéo en boucle dans le cadre"
+        aria-pressed={videoLoopPanActive}
+        onClick={() => toggleVideoLoopPan()}
       >
         {HAND_ICON}
       </button>
@@ -465,12 +466,7 @@ export default function SitePreview({
     hero: content.hero ? (
       <header key="hero" className="preview-hero" ref={heroRef as React.Ref<HTMLElement>}>
         <div className="preview-hero__bg">
-          <div
-            className="preview-hero__media"
-            ref={heroMediaRef}
-            style={mediaPanSection === "hero" ? { cursor: "grab" } : undefined}
-            {...(mediaPanSection === "hero" ? heroImgDrag : {})}
-          >
+          <div className="preview-hero__media">
             {content.hero.video ? (
               <HeroVideo
                 className="preview-hero__image"
@@ -506,7 +502,7 @@ export default function SitePreview({
           </div>
         </div>
         {heroTextDrag.isDragging && <AlignmentGuides activeGuides={heroTextDrag.activeGuides} />}
-        <div className="preview-hero__content preview-text-block" style={contentPosStyle(content.hero.contentPosition)}>
+        <div className="preview-hero__content preview-text-block" style={resolvedContentPositionStyle(content.hero.contentPosition)}>
           {textDragBtn(heroTextDrag)}
           <AutoTextarea
             className="preview-input preview-hero__title"
@@ -534,7 +530,6 @@ export default function SitePreview({
               Remplacer la vidéo
             </label>
           )}
-          {mediaPanBtn("hero")}
         </div>
       </header>
     ) : null,
@@ -542,12 +537,7 @@ export default function SitePreview({
     about: content.about ? (
       <section key="about" className="preview-about" ref={aboutRef as React.Ref<HTMLElement>}>
         <div className="preview-about__grid">
-          <div
-            className="preview-about__media"
-            ref={aboutMediaRef}
-            style={mediaPanSection === "about" ? { cursor: "grab" } : undefined}
-            {...(mediaPanSection === "about" ? aboutImgDrag : {})}
-          >
+          <div className="preview-about__media">
             {content.about.video ? (
               <video
                 className="preview-about__image"
@@ -591,11 +581,10 @@ export default function SitePreview({
                   Remplacer la vidéo
                 </label>
               )}
-              {mediaPanBtn("about")}
             </div>
           </div>
           {aboutTextDrag.isDragging && <AlignmentGuides activeGuides={aboutTextDrag.activeGuides} />}
-          <div className="preview-about__text preview-text-block" style={contentPosStyle(content.about.contentPosition)}>
+          <div className="preview-about__text preview-text-block" style={resolvedContentPositionStyle(content.about.contentPosition)}>
             {textDragBtn(aboutTextDrag)}
             <AutoTextarea
               className="preview-input preview-about__title"
@@ -621,7 +610,7 @@ export default function SitePreview({
     services: content.services ? (
       <section key="services" className="preview-services" ref={servicesRef as React.Ref<HTMLElement>} style={{ background: theme.servicesBg }}>
         {servicesTextDrag.isDragging && <AlignmentGuides activeGuides={servicesTextDrag.activeGuides} />}
-        <div className="preview-text-block" style={contentPosStyle(content.services.contentPosition)}>
+        <div className="preview-text-block" style={resolvedContentPositionStyle(content.services.contentPosition)}>
           {textDragBtn(servicesTextDrag)}
           <AutoTextarea
             className="preview-input preview-services__title"
@@ -683,20 +672,23 @@ export default function SitePreview({
         <div
           className="preview-video-loop__media"
           ref={videoLoopMediaRef}
-          style={mediaPanSection === "videoLoop" ? { cursor: "grab" } : undefined}
-          {...(mediaPanSection === "videoLoop" ? videoLoopImgDrag : {})}
+          style={videoLoopPanActive ? { cursor: "grab", touchAction: "none" } : undefined}
+          {...(videoLoopPanActive ? videoLoopImgDrag : {})}
         >
           {content.videoLoop.video && (
             <HeroVideo
               className="preview-video-loop__video"
-              style={{ objectPosition: objPos(content.videoLoop.imagePosition) }}
+              style={{
+                objectPosition: objPos(content.videoLoop.imagePosition),
+                pointerEvents: videoLoopPanActive ? "none" : undefined,
+              }}
               src={imageSrc(content.videoLoop.video, siteUrl, imageCacheBust)}
               poster=""
             />
           )}
         </div>
         {videoLoopTextDrag.isDragging && <AlignmentGuides activeGuides={videoLoopTextDrag.activeGuides} />}
-        <div className="preview-text-block" style={contentPosStyle(content.videoLoop.contentPosition)}>
+        <div className="preview-text-block" style={resolvedContentPositionStyle(content.videoLoop.contentPosition)}>
           {textDragBtn(videoLoopTextDrag)}
           <AutoTextarea
             className="preview-input preview-video-loop__title"
@@ -710,7 +702,7 @@ export default function SitePreview({
           <label htmlFor="cms-upload-videoloop-video" className="preview-media-btn">
             Remplacer la vidéo
           </label>
-          {mediaPanBtn("videoLoop")}
+          {videoLoopPanButton()}
         </div>
       </section>
     ) : null,
@@ -718,7 +710,7 @@ export default function SitePreview({
     videoPlay: content.videoPlay ? (
       <section key="videoPlay" className="preview-video-play" ref={videoPlayRef as React.Ref<HTMLElement>}>
         {videoPlayTextDrag.isDragging && <AlignmentGuides activeGuides={videoPlayTextDrag.activeGuides} />}
-        <div className="preview-text-block" style={contentPosStyle(content.videoPlay.contentPosition)}>
+        <div className="preview-text-block" style={resolvedContentPositionStyle(content.videoPlay.contentPosition)}>
           {textDragBtn(videoPlayTextDrag)}
           <AutoTextarea
             className="preview-input preview-video-play__title"
@@ -728,12 +720,7 @@ export default function SitePreview({
             aria-label="Titre vidéo lecture"
           />
         </div>
-        <div
-          className="preview-video-play__media"
-          ref={videoPlayMediaRef}
-          style={mediaPanSection === "videoPlay" ? { cursor: "grab" } : undefined}
-          {...(mediaPanSection === "videoPlay" ? videoPlayImgDrag : {})}
-        >
+        <div className="preview-video-play__media">
           {content.videoPlay.video ? (
             <video
               className="preview-video-play__video"
@@ -757,7 +744,6 @@ export default function SitePreview({
           <label htmlFor="cms-upload-videoplay-poster" className="preview-media-btn">
             Remplacer la miniature
           </label>
-          {mediaPanBtn("videoPlay")}
         </div>
       </section>
     ) : null,
@@ -765,7 +751,7 @@ export default function SitePreview({
     contact: content.contact ? (
       <section key="contact" className="preview-contact" ref={contactRef as React.Ref<HTMLElement>}>
         {contactTextDrag.isDragging && <AlignmentGuides activeGuides={contactTextDrag.activeGuides} />}
-        <div className="preview-text-block" style={contentPosStyle(content.contact.contentPosition)}>
+        <div className="preview-text-block" style={resolvedContentPositionStyle(content.contact.contentPosition)}>
           {textDragBtn(contactTextDrag)}
           <AutoTextarea
             className="preview-input preview-contact__title"
