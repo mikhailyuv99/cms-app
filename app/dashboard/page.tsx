@@ -791,9 +791,11 @@ export default function DashboardPage() {
           <>
             <div className="flex min-h-[calc(100dvh-3.25rem)] min-w-0 flex-col bg-black">
               <p className="border-b border-[var(--cms-border)] bg-[var(--cms-surface)] px-2 py-1.5 text-center text-[10px] text-[var(--cms-text-muted)] sm:text-xs">
-                Cliquez sur les <strong className="text-[var(--cms-text)]">textes</strong> pour les modifier, sur les{" "}
-                <strong className="text-[var(--cms-text)]">images / vidéos</strong> pour les remplacer. Bloc lecture :{" "}
-                <strong className="text-[var(--cms-text)]">Alt + clic</strong> sur la vidéo pour changer la miniature.
+                <strong className="text-[var(--cms-text)]">Textes</strong> : clic pour éditer.{" "}
+                <strong className="text-[var(--cms-text)]">Images</strong> : clic pour remplacer.{" "}
+                <strong className="text-[var(--cms-text)]">Vidéos</strong> : lecture normale (play) ;{" "}
+                <strong className="text-[var(--cms-text)]">Maj + clic</strong> sur la vidéo pour la remplacer ;{" "}
+                <strong className="text-[var(--cms-text)]">Maj + Alt + clic</strong> sur la vidéo « lecture » pour la miniature.
               </p>
               <iframe
                 key={liveIframeKey}
@@ -802,6 +804,7 @@ export default function DashboardPage() {
                 title="Site — aperçu identique au déploiement"
                 className="h-[min(88dvh,960px)] w-full min-h-0 flex-1 border-0 sm:h-[calc(100dvh-6.5rem)]"
                 referrerPolicy="strict-origin-when-cross-origin"
+                allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
               />
             </div>
           </>
