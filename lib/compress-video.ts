@@ -1,5 +1,5 @@
-const TARGET_MB = 95;
-const MAX_SIZE = 100 * 1024 * 1024;
+const TARGET_MB = 60;
+const MAX_SIZE = 70 * 1024 * 1024;
 
 let ffmpeg: import("@ffmpeg/ffmpeg").FFmpeg | null = null;
 let loaded = false;
