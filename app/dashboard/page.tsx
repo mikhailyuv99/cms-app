@@ -105,6 +105,8 @@ export default function DashboardPage() {
   const [showHint, setShowHint] = useState(true);
   const [hasUnsaved, setHasUnsaved] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  /** Maps relative file paths to preview URLs (raw GitHub) for instant display after upload */
+  const previewOverridesRef = useRef(new Map<string, string>());
 
   const contentRef = useRef(content);
   contentRef.current = content;
@@ -255,12 +257,26 @@ export default function DashboardPage() {
     let targetOrigin: string;
     try { targetOrigin = new URL(session.siteUrl).origin; } catch { return; }
     try {
-      const contentForIframe = absolutizeContentMediaForEmbed(payload, session.siteUrl);
+      let forIframe: ContentFile = JSON.parse(JSON.stringify(payload));
+
+      const overrides = previewOverridesRef.current;
+      if (overrides.size > 0) {
+        let json = JSON.stringify(forIframe);
+        overrides.forEach((previewUrl, path) => {
+          const from = JSON.stringify(path);
+          const to = JSON.stringify(previewUrl);
+          while (json.includes(from)) json = json.replace(from, to);
+        });
+        forIframe = JSON.parse(json);
+      }
+
+      forIframe = absolutizeContentMediaForEmbed(forIframe, session.siteUrl);
+
       iframeRef.current.contentWindow.postMessage(
         {
           source: "cms-app",
           type: "CMS_CONTENT",
-          content: contentForIframe,
+          content: forIframe,
           pageSlug: isMultiPage(payload) ? currentPageSlug : undefined,
         },
         targetOrigin,
@@ -372,9 +388,9 @@ export default function DashboardPage() {
     });
   }
 
-  async function uploadDirectToGitHub(file: File, filePath: string): Promise<string> {
+  async function uploadDirectToGitHub(file: File, filePath: string): Promise<{ path: string; rawUrl: string }> {
     const MAX_SIZE = 100 * 1024 * 1024;
-    if (file.size > MAX_SIZE) throw new Error(`Fichier trop volumineux (${(file.size / 1024 / 1024).toFixed(0)} Mo > 100 Mo).`);
+    if (file.size > MAX_SIZE) throw new Error(`Fichier trop volumineux (${(file.size / 1024 / 1024).toFixed(0)} Mo > 100 Mo). Compressez-le d'abord.`);
 
     const credRes = await fetch("/api/upload-credentials");
     if (!credRes.ok) throw new Error("Impossible d'obtenir les identifiants");
@@ -408,7 +424,14 @@ export default function DashboardPage() {
     const newCommit: string = (await cRes.json()).sha;
 
     await fetch(`${api}/git/refs/heads/${branch}`, { method: "PATCH", headers: h, body: JSON.stringify({ sha: newCommit }) });
-    return filePath;
+
+    const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${newCommit}/${filePath}`;
+    return { path: filePath, rawUrl };
+  }
+
+  function imgExt(file: File): string {
+    const map: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp" };
+    return map[file.type] || file.name.split(".").pop()?.toLowerCase() || "jpg";
   }
 
   async function onImageFileChange(e: React.ChangeEvent<HTMLInputElement>, key: "hero" | "about") {
@@ -418,30 +441,15 @@ export default function DashboardPage() {
     setUploadingMedia(key);
     setUploadProgress(0);
     try {
-      const form = new FormData();
-      form.append("file", file);
-      form.append("key", key);
-      const res = await xhrPost("/api/upload-image", form, undefined, (r) => setUploadProgress(r));
-      if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
-        setPublishMessage(data.error || `Échec upload (${res.status})`);
-        return;
-      }
-      const data = (await res.json()) as { path: string; pathWebp?: string; pathAvif?: string };
-      const blobUrl = URL.createObjectURL(file);
-      if (key === "hero") {
-        applyPageUpdate((c) => ({
-          ...c,
-          hero: { ...c.hero, image: blobUrl, ...(data.pathWebp && { imageWebp: data.pathWebp }), ...(data.pathAvif && { imageAvif: data.pathAvif }) } as NonNullable<ContentData["hero"]>,
-        }));
-      } else {
-        applyPageUpdate((c) => ({
-          ...c,
-          about: { ...c.about, image: blobUrl, ...(data.pathWebp && { imageWebp: data.pathWebp }), ...(data.pathAvif && { imageAvif: data.pathAvif }) } as NonNullable<ContentData["about"]>,
-        }));
-      }
-    } catch {
-      setPublishMessage("Erreur lors de l'upload");
+      const filePath = `images/${key}.${imgExt(file)}`;
+      const { rawUrl } = await uploadDirectToGitHub(file, filePath);
+      previewOverridesRef.current.set(filePath, rawUrl);
+      applyPageUpdate((c) => ({
+        ...c,
+        [key]: { ...(c[key] as object), image: filePath } as NonNullable<ContentData[typeof key]>,
+      }));
+    } catch (err) {
+      setPublishMessage(`Upload image: ${err instanceof Error ? err.message : "réseau"}`);
     } finally {
       setUploadingMedia(null);
     }
@@ -473,12 +481,12 @@ export default function DashboardPage() {
     try {
       const ext = videoFile.type === "video/webm" ? "webm" : "mp4";
       const filePath = `images/${key}.${ext}`;
-      await uploadDirectToGitHub(videoFile, filePath);
-      const blobUrl = URL.createObjectURL(videoFile);
-      if (key === "hero-video") applyPageUpdate((c) => ({ ...c, hero: { ...c.hero, video: blobUrl } as NonNullable<ContentData["hero"]> }));
-      else if (key === "about-video") applyPageUpdate((c) => ({ ...c, about: { ...c.about, video: blobUrl } as NonNullable<ContentData["about"]> }));
-      else if (key === "videoLoop-video") applyPageUpdate((c) => ({ ...c, videoLoop: { ...(c.videoLoop ?? { title: "", video: "" }), video: blobUrl } }));
-      else if (key === "videoPlay-video") applyPageUpdate((c) => ({ ...c, videoPlay: { ...(c.videoPlay ?? { title: "", video: "" }), video: blobUrl } }));
+      const { rawUrl } = await uploadDirectToGitHub(videoFile, filePath);
+      previewOverridesRef.current.set(filePath, rawUrl);
+      if (key === "hero-video") applyPageUpdate((c) => ({ ...c, hero: { ...c.hero, video: filePath } as NonNullable<ContentData["hero"]> }));
+      else if (key === "about-video") applyPageUpdate((c) => ({ ...c, about: { ...c.about, video: filePath } as NonNullable<ContentData["about"]> }));
+      else if (key === "videoLoop-video") applyPageUpdate((c) => ({ ...c, videoLoop: { ...(c.videoLoop ?? { title: "", video: "" }), video: filePath } }));
+      else if (key === "videoPlay-video") applyPageUpdate((c) => ({ ...c, videoPlay: { ...(c.videoPlay ?? { title: "", video: "" }), video: filePath } }));
     } catch (err) {
       setPublishMessage(`Upload vidéo: ${err instanceof Error ? err.message : "réseau"}`);
     } finally {
@@ -491,20 +499,14 @@ export default function DashboardPage() {
     e.target.value = "";
     if (!file || !content) return;
     setUploadingMedia("poster");
+    setUploadProgress(0);
     try {
-      const form = new FormData();
-      form.append("file", file);
-      form.append("key", "videoPlay-poster");
-      const res = await fetch("/api/upload-image", { method: "POST", body: form });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setPublishMessage((data as { error?: string }).error || `Échec upload (${res.status})`);
-        return;
-      }
-      const blobUrl = URL.createObjectURL(file);
-      applyPageUpdate((c) => ({ ...c, videoPlay: { ...(c.videoPlay ?? { title: "", video: "" }), poster: blobUrl } }));
+      const filePath = `images/videoPlay-poster.${imgExt(file)}`;
+      const { rawUrl } = await uploadDirectToGitHub(file, filePath);
+      previewOverridesRef.current.set(filePath, rawUrl);
+      applyPageUpdate((c) => ({ ...c, videoPlay: { ...(c.videoPlay ?? { title: "", video: "" }), poster: filePath } }));
     } catch (err) {
-      setPublishMessage(`Upload miniature: ${err instanceof Error ? err.message : "réseau"}`);
+      setPublishMessage(`Upload poster: ${err instanceof Error ? err.message : "réseau"}`);
     } finally {
       setUploadingMedia(null);
     }
