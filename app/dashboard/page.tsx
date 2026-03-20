@@ -807,7 +807,6 @@ export default function DashboardPage() {
                 src={iframeSrc}
                 title="Site — aperçu identique au déploiement"
                 className="h-[min(88dvh,960px)] w-full min-h-0 flex-1 border-0 sm:h-[calc(100dvh-6.5rem)]"
-                referrerPolicy="strict-origin-when-cross-origin"
                 allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
               />
             </div>
