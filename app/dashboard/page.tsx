@@ -240,6 +240,20 @@ export default function DashboardPage() {
       }
       if (e.data?.type === "CMS_PATCH" && e.data.patch && typeof e.data.patch === "object") {
         applyEmbedPatch(e.data.patch as Record<string, unknown>, e.data.pageSlug as string | undefined);
+        return;
+      }
+      if (e.data?.type === "CMS_UPLOAD_REQUEST" && typeof e.data.uploadKey === "string") {
+        const inputIdByKey: Record<string, string> = {
+          hero: "cms-upload-hero",
+          about: "cms-upload-about",
+          "hero-video": "cms-upload-hero-video",
+          "about-video": "cms-upload-about-video",
+          "videoLoop-video": "cms-upload-videoloop-video",
+          "videoPlay-video": "cms-upload-videoplay-video",
+          "videoPlay-poster": "cms-upload-videoplay-poster",
+        };
+        const inputId = inputIdByKey[e.data.uploadKey];
+        if (inputId) document.getElementById(inputId)?.click();
       }
     };
     window.addEventListener("message", onMsg);
@@ -734,28 +748,6 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      {showPageTabs && siteUrl && iframeSrc && (
-        <div className="sticky top-[3.25rem] z-40 border-b border-[var(--cms-border)] bg-[var(--cms-surface)] px-3 py-2">
-          <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-[var(--cms-text-muted)]">Pages</p>
-          <div className="flex flex-wrap gap-1.5">
-            {pageOrder.map((slug) => (
-              <button
-                key={slug}
-                type="button"
-                onClick={() => setCurrentPageSlug(slug)}
-                className={`rounded-md px-3 py-1 text-xs font-medium transition-colors sm:text-sm ${
-                  currentPageSlug === slug
-                    ? "bg-white text-black"
-                    : "bg-[var(--cms-bg)] text-[var(--cms-text-muted)] hover:text-[var(--cms-text)]"
-                }`}
-              >
-                {slug}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       <input id="cms-upload-hero" type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="sr-only" onChange={(e) => onImageFileChange(e, "hero")} aria-label="Remplacer l'image hero" />
       <input id="cms-upload-about" type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="sr-only" onChange={(e) => onImageFileChange(e, "about")} aria-label="Remplacer l'image à propos" />
       <input id="cms-upload-hero-video" type="file" accept="video/mp4,video/webm" className="sr-only" onChange={(e) => onVideoFileChange(e, "hero-video")} aria-label="Remplacer la vidéo hero" />
@@ -799,67 +791,18 @@ export default function DashboardPage() {
           <>
             <div className="flex min-h-[calc(100dvh-3.25rem)] min-w-0 flex-col bg-black">
               <p className="border-b border-[var(--cms-border)] bg-[var(--cms-surface)] px-2 py-1.5 text-center text-[10px] text-[var(--cms-text-muted)] sm:text-xs">
-                Édition <strong className="text-[var(--cms-text)]">directement sur le site</strong> (cliquez sur les textes). Médias : barre ci-dessous.
+                Cliquez sur les <strong className="text-[var(--cms-text)]">textes</strong> pour les modifier, sur les{" "}
+                <strong className="text-[var(--cms-text)]">images / vidéos</strong> pour les remplacer. Bloc lecture :{" "}
+                <strong className="text-[var(--cms-text)]">Alt + clic</strong> sur la vidéo pour changer la miniature.
               </p>
               <iframe
                 key={liveIframeKey}
                 ref={iframeRef}
                 src={iframeSrc}
                 title="Site — aperçu identique au déploiement"
-                className={
-                  showPageTabs && siteUrl && iframeSrc
-                    ? "h-[min(85dvh,920px)] w-full min-h-0 flex-1 border-0 sm:h-[calc(100dvh-12.5rem)]"
-                    : "h-[min(85dvh,920px)] w-full min-h-0 flex-1 border-0 sm:h-[calc(100dvh-8.5rem)]"
-                }
+                className="h-[min(88dvh,960px)] w-full min-h-0 flex-1 border-0 sm:h-[calc(100dvh-6.5rem)]"
                 referrerPolicy="strict-origin-when-cross-origin"
               />
-            </div>
-            <div className="pointer-events-none fixed bottom-0 left-0 right-0 z-30 flex justify-center p-2 sm:p-3">
-              <div className="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-1 rounded-xl border border-[var(--cms-border)] bg-[var(--cms-surface)]/95 px-2 py-2 shadow-lg backdrop-blur-sm sm:gap-2 sm:px-3">
-                <span className="hidden w-full text-center text-[10px] text-[var(--cms-text-muted)] sm:mb-0 sm:inline sm:w-auto sm:pr-2">Médias</span>
-                <label
-                  htmlFor="cms-upload-hero"
-                  className="cursor-pointer rounded-md bg-[var(--cms-bg)] px-2 py-1.5 text-[10px] font-medium text-[var(--cms-text)] hover:bg-[var(--cms-border)] sm:px-3 sm:text-xs"
-                >
-                  Image hero
-                </label>
-                <label
-                  htmlFor="cms-upload-about"
-                  className="cursor-pointer rounded-md bg-[var(--cms-bg)] px-2 py-1.5 text-[10px] font-medium text-[var(--cms-text)] hover:bg-[var(--cms-border)] sm:px-3 sm:text-xs"
-                >
-                  Image à propos
-                </label>
-                <label
-                  htmlFor="cms-upload-hero-video"
-                  className="cursor-pointer rounded-md bg-[var(--cms-bg)] px-2 py-1.5 text-[10px] font-medium text-[var(--cms-text)] hover:bg-[var(--cms-border)] sm:px-3 sm:text-xs"
-                >
-                  Vidéo hero
-                </label>
-                <label
-                  htmlFor="cms-upload-about-video"
-                  className="cursor-pointer rounded-md bg-[var(--cms-bg)] px-2 py-1.5 text-[10px] font-medium text-[var(--cms-text)] hover:bg-[var(--cms-border)] sm:px-3 sm:text-xs"
-                >
-                  Vidéo à propos
-                </label>
-                <label
-                  htmlFor="cms-upload-videoloop-video"
-                  className="cursor-pointer rounded-md bg-[var(--cms-bg)] px-2 py-1.5 text-[10px] font-medium text-[var(--cms-text)] hover:bg-[var(--cms-border)] sm:px-3 sm:text-xs"
-                >
-                  Vidéo boucle
-                </label>
-                <label
-                  htmlFor="cms-upload-videoplay-video"
-                  className="cursor-pointer rounded-md bg-[var(--cms-bg)] px-2 py-1.5 text-[10px] font-medium text-[var(--cms-text)] hover:bg-[var(--cms-border)] sm:px-3 sm:text-xs"
-                >
-                  Vidéo lecture
-                </label>
-                <label
-                  htmlFor="cms-upload-videoplay-poster"
-                  className="cursor-pointer rounded-md bg-[var(--cms-bg)] px-2 py-1.5 text-[10px] font-medium text-[var(--cms-text)] hover:bg-[var(--cms-border)] sm:px-3 sm:text-xs"
-                >
-                  Miniature lecture
-                </label>
-              </div>
             </div>
           </>
         ) : (
