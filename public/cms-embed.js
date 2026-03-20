@@ -221,6 +221,8 @@
       if (nextSec && nextSec.hasAttribute && nextSec.hasAttribute("data-section")) {
         addTbBtn(null, "\u25BC", function () { moveSectionDown(sec); deselect(); }, false, "cms-tb-txt");
       }
+      addTbBtn(null, "H+", function () { changeSectionHeight(sec, 2); }, false, "cms-tb-txt");
+      addTbBtn(null, "H\u2212", function () { changeSectionHeight(sec, -2); }, false, "cms-tb-txt");
     }
   }
 
@@ -329,16 +331,17 @@
 
   /* ── size control ── */
   function changeSize(el, config, delta) {
-    var base = parseFloat(el.dataset.cmsBaseSize);
-    if (!base) { el.style.fontSize = ""; base = parseFloat(window.getComputedStyle(el).fontSize); el.dataset.cmsBaseSize = base; }
     var current = parseFloat(el.dataset.cmsSize) || 1;
     var next = Math.round(clamp(current + delta, 0.5, 2.5) * 10) / 10;
     el.dataset.cmsSize = next;
-    el.style.fontSize = (base * next) + "px";
     if (config.isCard) {
+      applyCardTransform(el);
       var d = pageData(currentSlug);
       if (d && d.services && d.services.items) { var items = d.services.items.map(function (it) { return Object.assign({}, it); }); items[config.cardIdx].size = next; postToParent({ type: "CMS_PATCH", source: "cms-site", pageSlug: currentSlug, patch: { services: { items: items } } }); }
     } else {
+      var base = parseFloat(el.dataset.cmsBaseSize);
+      if (!base) { el.style.fontSize = ""; base = parseFloat(window.getComputedStyle(el).fontSize); el.dataset.cmsBaseSize = base; }
+      el.style.fontSize = (base * next) + "px";
       var p = {}; p[config.section] = {}; p[config.section][config.sizeField] = next;
       postToParent({ type: "CMS_PATCH", source: "cms-site", pageSlug: currentSlug, patch: p });
     }
@@ -348,12 +351,24 @@
 
   function applySize(el, size) {
     if (!el) return;
+    el.dataset.cmsSize = size || 1;
+    if (!size || size === 1) return;
     el.style.fontSize = "";
     var base = parseFloat(window.getComputedStyle(el).fontSize);
     el.dataset.cmsBaseSize = base;
-    el.dataset.cmsSize = size || 1;
-    if (!size || size === 1) return;
     el.style.fontSize = (base * size) + "px";
+  }
+
+  function applyCardTransform(card) {
+    var px = parseFloat(card.dataset.cmsPosX) || 0;
+    var py = parseFloat(card.dataset.cmsPosY) || 0;
+    var sz = parseFloat(card.dataset.cmsSize) || 1;
+    var t = "";
+    if (px || py) t += "translate(" + px + "px, " + py + "px) ";
+    if (sz !== 1) t += "scale(" + sz + ")";
+    t = t.trim();
+    card.style.transform = t || "";
+    card.style.setProperty("--cms-translate", t || "none");
   }
 
   /* ── section reorder ── */
@@ -374,7 +389,7 @@
         down.addEventListener("click", function (e) { e.stopPropagation(); moveSectionDown(sec); });
         bar.appendChild(down);
       }
-      sec.insertBefore(bar, sec.firstChild);
+      sec.appendChild(bar);
     });
   }
 
@@ -401,6 +416,29 @@
     }
   }
 
+  function changeSectionHeight(sec, deltaRem) {
+    var current = parseFloat(sec.dataset.cmsExtraHeight) || 0;
+    var next = Math.max(0, current + deltaRem);
+    sec.dataset.cmsExtraHeight = next;
+    sec.style.paddingBottom = next ? (next + "rem") : "";
+    var sectionName = sec.getAttribute("data-section");
+    var d = pageData(currentSlug);
+    var sizes = (d && d.sectionSizes) ? Object.assign({}, d.sectionSizes) : {};
+    sizes[sectionName] = next;
+    postToParent({ type: "CMS_PATCH", source: "cms-site", pageSlug: currentSlug, patch: { sectionSizes: sizes } });
+  }
+
+  function applySectionSizes(sizes) {
+    if (!sizes) return;
+    Object.keys(sizes).forEach(function (name) {
+      var sec = document.querySelector('[data-section="' + name + '"]');
+      if (sec && sizes[name]) {
+        sec.dataset.cmsExtraHeight = sizes[name];
+        sec.style.paddingBottom = sizes[name] + "rem";
+      }
+    });
+  }
+
   /* ── clear & render ── */
   function clearAll() {
     if (isCms) deselect();
@@ -424,6 +462,7 @@
     if (d.services) renderServices(d.services);
     if (d.contact) renderContact(d.contact);
     if (d.sectionOrder) applySectionOrder(d.sectionOrder);
+    if (d.sectionSizes) applySectionSizes(d.sectionSizes);
     if (isCms) wireEditors();
     if (isCms) addSectionBars();
     requestAnimationFrame(observeAnims);
@@ -437,10 +476,17 @@
     if (!el || !pos) return;
     if (typeof el === "string") el = document.querySelector(el);
     if (!el) return;
-    var t = "translate(" + (pos.x || 0) + "px, " + (pos.y || 0) + "px)";
+    var x = pos.x || 0, y = pos.y || 0;
+    el.dataset.cmsPosX = x; el.dataset.cmsPosY = y;
+    if (x === 0 && y === 0) {
+      el.style.removeProperty("--cms-translate");
+      el.classList.remove("cms-positioned");
+      return;
+    }
+    var t = "translate(" + x + "px, " + y + "px)";
     el.style.setProperty("--cms-translate", t);
-    el.dataset.cmsPosX = pos.x || 0; el.dataset.cmsPosY = pos.y || 0;
-    if (isCms || !el.hasAttribute("data-anim")) el.style.transform = t;
+    el.classList.add("cms-positioned");
+    el.style.transform = t;
   }
 
   /* FIX: controlled videos use object-position, not the oversized approach */
@@ -514,10 +560,11 @@
     var lbl = document.querySelector(".video-play__label"); if (lbl) lbl.textContent = d.label || "Showreel";
     var c = document.getElementById("video-play-media");
     if (c) { var glow = c.querySelector(".video-play__glow"); c.innerHTML = ""; if (glow) c.appendChild(glow); if (d.video) { var v = document.createElement("video"); v.src = resolveUrl(d.video); v.controls = true; v.playsInline = true; v.preload = "auto"; v.setAttribute("playsinline", ""); if (d.poster) v.poster = resolveUrl(d.poster); applyCrop(v, d.videoPosition); c.appendChild(v); } }
+    applyPos("#video-play-media", d.mediaPosition);
     applyPos("#video-play-title", d.titlePosition); applyPos(".video-play__label", d.labelPosition);
     applySize(document.getElementById("video-play-title"), d.titleSize);
     applySize(document.querySelector(".video-play__label"), d.labelSize);
-    registerControl(document.getElementById("video-play-media"), { canMove: true, uploadKey: "videoPlay-video", hasPoster: true, cropContainer: "video-play-media", cropSection: "videoPlay", cropPosField: "videoPosition" });
+    registerControl(document.getElementById("video-play-media"), { canMove: true, uploadKey: "videoPlay-video", hasPoster: true, section: "videoPlay", posField: "mediaPosition" });
     registerControl(document.getElementById("video-play-title"), { canMove: true, canResize: true, section: "videoPlay", posField: "titlePosition", sizeField: "titleSize" });
     registerControl(document.querySelector(".video-play__label"), { canMove: true, canResize: true, section: "videoPlay", posField: "labelPosition", sizeField: "labelSize" });
   }
@@ -545,9 +592,11 @@
     d.items.forEach(function (item, idx) {
       var card = document.createElement("div"); card.className = "service-card"; card.dataset.idx = idx;
       card.innerHTML = '<h3 class="service-card__title">' + esc(item.title) + '</h3><p class="service-card__description">' + esc(item.description) + '</p>';
-      if (item.position) applyPos(card, item.position);
+      card.dataset.cmsPosX = item.position ? (item.position.x || 0) : 0;
+      card.dataset.cmsPosY = item.position ? (item.position.y || 0) : 0;
+      card.dataset.cmsSize = item.size || 1;
       list.appendChild(card);
-      applySize(card, item.size);
+      applyCardTransform(card);
       registerControl(card, { canMove: true, canResize: true, isCard: true, cardIdx: idx });
     });
     applyPos("#services-title", d.titlePosition); applyPos(".services__eyebrow", d.eyebrowPosition);
@@ -703,9 +752,8 @@
       var rawX2 = dragState.ox + (cx - dragState.sx), rawY2 = dragState.oy + (cy - dragState.sy);
       var snap2 = computeTranslateSnap(rawX2, rawY2, dragState.elRect, dragState.parentRect, dragState.ox, dragState.oy);
       updateSnapUI(snap2.sx, snap2.sy);
-      var t2 = "translate(" + snap2.x + "px, " + snap2.y + "px)";
-      dragState.card.style.transform = t2; dragState.card.style.setProperty("--cms-translate", t2);
       dragState.card.dataset.cmsPosX = snap2.x; dragState.card.dataset.cmsPosY = snap2.y;
+      applyCardTransform(dragState.card);
     }
   }
 
@@ -714,7 +762,11 @@
     var dy = resizeState.sy - cy;
     var next = Math.round(clamp(resizeState.startSize + dy * 0.005, 0.5, 2.5) * 10) / 10;
     resizeState.el.dataset.cmsSize = next;
-    resizeState.el.style.fontSize = (resizeState.base * next) + "px";
+    if (resizeState.cfg && resizeState.cfg.isCard) {
+      applyCardTransform(resizeState.el);
+    } else {
+      resizeState.el.style.fontSize = (resizeState.base * next) + "px";
+    }
     positionToolbar(); positionHandles();
   }
 
@@ -812,8 +864,7 @@
       /* FIX: force position:relative on all sections so section bars work */
       '[data-section] { position: relative; }',
 
-      '[data-anim] { opacity: 1 !important; transition: none !important; }',
-      '.hero__image { animation: none !important; }',
+      '.cms-positioned[data-anim] { opacity: 1 !important; }',
 
       '[data-cms-ctrl] { cursor: pointer; }',
       '[data-cms-ctrl]:hover { outline: 1.5px dashed rgba(196,165,90,.3); outline-offset: 2px; }',
@@ -877,7 +928,7 @@
       '.cms-snap-crosshair { position: absolute; width: 10px; height: 10px; border: 2px solid var(--gold, #c4a55a); border-radius: 50%; transform: translate(-50%,-50%); }',
       '.cms-snap-label { position: absolute; bottom: 8px; right: 8px; padding: 2px 8px; font-size: 10px; font-family: monospace; color: var(--gold, #c4a55a); background: rgba(0,0,0,.8); border-radius: 4px; }',
 
-      '.cms-sec-bar { position: absolute; top: 10px; right: 10px; z-index: 500; display: flex; gap: 3px; }',
+      '.cms-sec-bar { position: absolute; top: 10px; right: 10px; z-index: 500; display: flex; gap: 3px; pointer-events: auto; }',
       '.cms-sec-btn {',
       '  display: flex; align-items: center; justify-content: center;',
       '  width: 26px; height: 26px; padding: 0;',
@@ -894,7 +945,7 @@
       '.service-card:hover { transform: var(--cms-translate, none) !important; }',
       '.contact__cta { cursor: pointer; position: relative; display: inline-block; }',
       '.contact__cta:hover { transform: var(--cms-translate, none) !important; }',
-      '[data-anim].is-visible { transform: var(--cms-translate, none) !important; }',
+      '[data-anim].is-visible.cms-positioned { transform: var(--cms-translate) !important; }',
 
       '@media (max-width: 680px) {',
       '  .cms-tb-btn { height: 26px; min-width: 26px; }',
