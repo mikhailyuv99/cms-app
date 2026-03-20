@@ -64,7 +64,8 @@ export interface ContentData {
     title: string;
     text: string;
     email: string;
-    buttonLabel: string;
+    buttonLabel?: string;
+    cta?: string;
     contentPosition?: Position;
   };
   videoLoop?: {
