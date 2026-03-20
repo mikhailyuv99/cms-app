@@ -409,7 +409,7 @@ export default function SitePreview({
   );
   const videoLoopPan = useMediaPanHandleDrag(
     videoLoopMediaRef,
-    content.videoLoop?.imagePosition,
+    content.videoLoop?.videoPosition,
     (p) => onImagePosition("videoLoop", p),
     Boolean(content.videoLoop && content.videoLoop.video),
   );
@@ -776,7 +776,7 @@ export default function SitePreview({
             <HeroVideo
               className="preview-video-loop__video"
               style={{
-                objectPosition: objPos(content.videoLoop.imagePosition),
+                objectPosition: objPos(content.videoLoop.videoPosition),
                 pointerEvents: videoLoopPan.isDragging ? "none" : undefined,
               }}
               src={imageSrc(content.videoLoop.video, siteUrl, imageCacheBust)}
@@ -832,7 +832,7 @@ export default function SitePreview({
           {content.videoPlay.video ? (
             <video
               className="preview-video-play__video"
-              style={{ objectPosition: objPos(content.videoPlay.imagePosition) }}
+              style={{ objectPosition: objPos(content.videoPlay.videoPosition) }}
               src={imageSrc(content.videoPlay.video, siteUrl, imageCacheBust)}
               poster={content.videoPlay.poster ? imageSrc(content.videoPlay.poster, siteUrl, imageCacheBust) : undefined}
               controls

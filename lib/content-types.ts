@@ -39,6 +39,7 @@ export interface ContentData {
     title: string;
     subtitle: string;
     image: string;
+    badge?: string;
     imageWebp?: string;
     imageAvif?: string;
     video?: string;
@@ -49,6 +50,7 @@ export interface ContentData {
     title: string;
     text: string;
     image: string;
+    eyebrow?: string;
     imageWebp?: string;
     imageAvif?: string;
     video?: string;
@@ -57,6 +59,7 @@ export interface ContentData {
   };
   services?: {
     title: string;
+    eyebrow?: string;
     items: Array<{ title: string; description: string }>;
     contentPosition?: Position;
   };
@@ -71,14 +74,15 @@ export interface ContentData {
   videoLoop?: {
     title: string;
     video: string;
-    imagePosition?: Position;
+    videoPosition?: Position;
     contentPosition?: Position;
   };
   videoPlay?: {
     title: string;
     video: string;
+    label?: string;
     poster?: string;
-    imagePosition?: Position;
+    videoPosition?: Position;
     contentPosition?: Position;
   };
   theme?: ThemeColors;
