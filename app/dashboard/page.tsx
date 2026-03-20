@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   getEffectiveSectionOrder,
@@ -16,6 +16,10 @@ import SitePreview from "./SitePreview";
 
 const DEFAULT_SECTION_ORDER: SectionId[] = ["hero", "about", "services", "contact"];
 const MAX_HISTORY = 80;
+
+function trimSiteUrl(u: string) {
+  return u.replace(/\/$/, "");
+}
 
 function cloneContent(c: ContentFile): ContentFile {
   return JSON.parse(JSON.stringify(c));
@@ -49,9 +53,11 @@ export default function DashboardPage() {
   const [compressionProgress, setCompressionProgress] = useState(0);
   const [compressionLog, setCompressionLog] = useState("");
   const [uploadProgress, setUploadProgress] = useState(0);
-  /** cms = gabarit éditable ; live = iframe du site réel (fidélité pixel pour tout thème) */
-  const [previewMode, setPreviewMode] = useState<"cms" | "live">("cms");
+  /** Recharge l’iframe après publish (déploiement) */
   const [liveIframeKey, setLiveIframeKey] = useState(0);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [iframeReady, setIframeReady] = useState(false);
+  const [iframeSrc, setIframeSrc] = useState<string | null>(null);
 
   const applyPageUpdate = useCallback(
     (updater: (page: ContentData) => ContentData) => {
@@ -119,6 +125,59 @@ export default function DashboardPage() {
       })
       .finally(() => setLoading(false));
   }, [session]);
+
+  useEffect(() => {
+    if (session === null || session === false || !session.siteUrl) {
+      setIframeSrc(null);
+      return;
+    }
+    setIframeSrc(`${trimSiteUrl(session.siteUrl)}/?cmsEmbed=1&parentOrigin=${encodeURIComponent(window.location.origin)}`);
+  }, [session]);
+
+  useEffect(() => {
+    setIframeReady(false);
+  }, [liveIframeKey, iframeSrc]);
+
+  useEffect(() => {
+    if (session === null || session === false || !session.siteUrl) return;
+    let siteOrigin: string;
+    try {
+      siteOrigin = new URL(session.siteUrl).origin;
+    } catch {
+      return;
+    }
+    const onMsg = (e: MessageEvent) => {
+      if (e.origin !== siteOrigin) return;
+      if (e.data?.source === "cms-site" && e.data?.type === "CMS_READY") {
+        setIframeReady(true);
+      }
+    };
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, [session]);
+
+  useEffect(() => {
+    if (!content || !iframeReady || !iframeRef.current?.contentWindow || session === null || session === false || !session.siteUrl) return;
+    let targetOrigin: string;
+    try {
+      targetOrigin = new URL(session.siteUrl).origin;
+    } catch {
+      return;
+    }
+    try {
+      iframeRef.current.contentWindow.postMessage(
+        {
+          source: "cms-app",
+          type: "CMS_CONTENT",
+          content: JSON.parse(JSON.stringify(content)) as ContentFile,
+          pageSlug: isMultiPage(content) ? currentPageSlug : undefined,
+        },
+        targetOrigin,
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [content, currentPageSlug, iframeReady, session]);
 
   async function handlePublish() {
     if (!content || !sha) return;
@@ -493,7 +552,6 @@ export default function DashboardPage() {
   const pageContent = getCurrentPageContent(content, currentPageSlug);
   const showPageTabs = isMultiPage(content) && pageOrder.length > 1;
   const siteUrl = session && typeof session === "object" ? session.siteUrl : undefined;
-  const showLivePreview = Boolean(siteUrl);
 
   return (
     <div className="min-h-screen bg-[var(--cms-bg)]">
@@ -503,25 +561,6 @@ export default function DashboardPage() {
             <h1 className="font-display truncate text-base font-semibold text-[var(--cms-text)] sm:text-lg">
               {session && typeof session === "object" && session.name ? session.name : "Édition du site"}
             </h1>
-            {showLivePreview && (
-              <div className="flex min-w-0 max-w-[11rem] shrink items-center rounded-md border border-[var(--cms-border)] bg-[var(--cms-bg)] p-0.5 sm:max-w-none" role="group" aria-label="Mode de prévisualisation">
-                <button
-                  type="button"
-                  onClick={() => setPreviewMode("cms")}
-                  className={`rounded px-2 py-1 text-xs font-semibold sm:px-2.5 sm:text-sm ${previewMode === "cms" ? "bg-[var(--cms-surface)] text-[var(--cms-text)]" : "text-[var(--cms-text-muted)] hover:text-[var(--cms-text)]"}`}
-                >
-                  Édition
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPreviewMode("live")}
-                  className={`rounded px-2 py-1 text-xs font-semibold sm:px-2.5 sm:text-sm ${previewMode === "live" ? "bg-[var(--cms-surface)] text-[var(--cms-text)]" : "text-[var(--cms-text-muted)] hover:text-[var(--cms-text)]"}`}
-                  title="Affiche le site déployé tel quel (CSS / layout du repo)"
-                >
-                  Site déployé
-                </button>
-              </div>
-            )}
             <div className="flex shrink-0 items-center rounded-md border border-[var(--cms-border)] bg-[var(--cms-bg)] p-0.5">
               <button
                 type="button"
@@ -640,22 +679,48 @@ export default function DashboardPage() {
       )}
 
       <div className="preview-viewport">
-        {previewMode === "live" && siteUrl ? (
-          <div className="flex min-h-[calc(100dvh-3.25rem)] flex-col bg-[var(--cms-bg)]">
-            <p className="border-b border-[var(--cms-border)] px-3 py-2 text-center text-xs text-[var(--cms-text-muted)] sm:text-sm">
-              <strong className="text-[var(--cms-text)]">Site déployé</strong> — rendu identique au site public (thème, cadres, marges). Les changements non enregistrés / non déployés ne s’affichent pas ici. Passe en{" "}
-              <button type="button" className="font-semibold text-white underline" onClick={() => setPreviewMode("cms")}>
-                Édition
-              </button>{" "}
-              pour modifier.
-            </p>
-            <iframe
-              key={liveIframeKey}
-              src={siteUrl}
-              title="Prévisualisation du site déployé"
-              className="w-full flex-1 min-h-[70dvh] border-0 bg-white"
-              referrerPolicy="strict-origin-when-cross-origin"
-            />
+        {siteUrl && iframeSrc ? (
+          <div className="flex min-h-[calc(100dvh-3.25rem)] flex-col lg:flex-row">
+            <div className="flex min-h-[45vh] min-w-0 flex-1 flex-col bg-black">
+              <p className="border-b border-[var(--cms-border)] bg-[var(--cms-surface)] px-2 py-1.5 text-center text-[10px] text-[var(--cms-text-muted)] sm:text-xs">
+                Aperçu = <strong className="text-[var(--cms-text)]">le site déployé</strong> (même HTML/CSS). Mettez à jour <code className="rounded bg-[var(--cms-bg)] px-1">js/app.js</code> du site avec la prise en charge <code className="rounded bg-[var(--cms-bg)] px-1">cmsEmbed=1</code>, puis republiez.
+              </p>
+              <iframe
+                key={liveIframeKey}
+                ref={iframeRef}
+                src={iframeSrc}
+                title="Site — aperçu identique au déploiement"
+                className="h-[min(78dvh,900px)] w-full flex-1 border-0 lg:h-auto lg:min-h-[calc(100dvh-5rem)]"
+                referrerPolicy="strict-origin-when-cross-origin"
+              />
+            </div>
+            <div className="flex w-full shrink-0 flex-col border-t border-[var(--cms-border)] bg-[var(--cms-bg)] lg:w-[min(100%,420px)] lg:border-l lg:border-t-0 xl:w-[min(100%,480px)]">
+              <p className="border-b border-[var(--cms-border)] px-2 py-1.5 text-[10px] font-medium text-[var(--cms-text-muted)] sm:text-xs">
+                Contrôles d’édition (textes, médias, positions) — appliqués en direct dans l’aperçu
+              </p>
+              <div className="min-h-0 flex-1 overflow-hidden">
+                <SitePreview
+                  embedPanel
+                  content={pageContent}
+                  onHero={updateHero}
+                  onAbout={updateAbout}
+                  onService={updateService}
+                  onServicesTitle={(v) => applyPageUpdate((c) => ({ ...c, services: { ...(c.services ?? { title: "", items: [] }), title: v } }))}
+                  onContact={updateContact}
+                  onVideoLoopTitle={(v) => applyPageUpdate((c) => ({ ...c, videoLoop: { ...(c.videoLoop ?? { title: "", video: "" }), title: v } }))}
+                  onVideoPlayTitle={(v) => applyPageUpdate((c) => ({ ...c, videoPlay: { ...(c.videoPlay ?? { title: "", video: "" }), title: v } }))}
+                  onSectionReorder={reorderSection}
+                  onServiceCardReorder={reorderServiceCard}
+                  onImagePosition={handleImagePosition}
+                  onContentPosition={handleContentPosition}
+                  imageCacheBust={imageCacheBust}
+                  siteUrl={siteUrl}
+                  pageOrder={showPageTabs ? pageOrder : undefined}
+                  currentPageSlug={showPageTabs ? currentPageSlug : undefined}
+                  onPageChange={showPageTabs ? setCurrentPageSlug : undefined}
+                />
+              </div>
+            </div>
           </div>
         ) : (
           <SitePreview

@@ -9,6 +9,22 @@
   min-height: 100%;
   box-sizing: border-box;
 }
+/* À côté de l’iframe : contrôles scrollables, pas un second “site” plein écran */
+.preview-root--embed-panel {
+  min-height: 0;
+  max-height: min(100dvh - 5rem, 900px);
+  overflow-y: auto;
+  font-size: 0.92rem;
+  border-radius: 0;
+}
+.preview-root--embed-panel .preview-hero {
+  min-height: 42vh;
+}
+.preview-root--embed-panel .preview-media-bar,
+.preview-root--embed-panel .preview-media-bar-inline {
+  opacity: 1;
+  pointer-events: auto;
+}
 .preview-root *, .preview-root *::before, .preview-root *::after { box-sizing: border-box; }
 /* Default images — but NOT full-bleed cover medias (see overrides below) */
 .preview-root img { max-width: 100%; height: auto; display: block; }

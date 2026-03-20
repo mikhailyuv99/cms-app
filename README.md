@@ -39,14 +39,15 @@ Ouvrir **http://localhost:3000**. Le client entre le **mot de passe de son proje
 
 4. Commit, push, et redéployer le CMS. Donner au client l’URL du CMS et le mot de passe choisi.
 
-## Prévisualisation (fidélité au site réel)
+## Prévisualisation = site déployé (pixel-identique)
 
-Dans le tableau de bord, deux modes :
+Si le projet a une **`siteUrl`** dans `projects.json`, le dashboard affiche **le vrai site** dans une iframe (`?cmsEmbed=1`) et pousse le `content.json` en **postMessage** : le rendu est le même que sur Netlify (HTML/CSS du client).
 
-- **Édition** — gabarit React du CMS : idéal pour modifier textes, médias, positions. Il suit le **modèle** (sections + `preview.css`) : si le site client a un **thème ou un HTML très différent** du mockup, l’aperçu peut ne pas être pixel-identique.
-- **Site déployé** — charge l’URL `siteUrl` du projet dans une **iframe** : c’est **exactement** le site public (CSS, cadres, marges, tout). Les brouillons non publiés ne s’y voient pas ; après **Enregistrer**, attendre le déploiement Netlify puis rafraîchir ou repasser sur ce mode.
+**À faire sur chaque site client** (une fois, dans le dépôt du site) : utiliser la version à jour de `mockup-site/js/app.js` qui gère `cmsEmbed=1` (pas de `fetch` du JSON dans l’iframe ; contenu fourni par le CMS). Après merge + déploiement, l’aperçu et le site public restent alignés.
 
-> Pour éditer *sur* le rendu pixel-parfait, il faudrait un script embarqué côté site (postMessage) ou même origine — ce n’est pas le cas par défaut, pour respecter la règle d’indépendance CMS / sites clients.
+Sans `siteUrl`, seul le gabarit d’édition React (`SitePreview`) est affiché.
+
+**Note** : si l’iframe reste vide, vérifiez les en-têtes du site (`X-Frame-Options` / CSP `frame-ancestors`) : ils doivent autoriser l’URL du CMS en parent.
 
 ## Prérequis
 

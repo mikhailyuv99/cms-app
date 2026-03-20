@@ -330,6 +330,8 @@ interface SitePreviewProps {
   pageOrder?: string[];
   currentPageSlug?: string;
   onPageChange?: (slug: string) => void;
+  /** Panneau latéral à côté de l’iframe (même site réel à gauche / haut) */
+  embedPanel?: boolean;
 }
 
 function pageLabel(slug: string): string {
@@ -367,6 +369,7 @@ export default function SitePreview({
   pageOrder,
   currentPageSlug,
   onPageChange,
+  embedPanel,
 }: SitePreviewProps) {
   const showNav = pageOrder && pageOrder.length > 1 && onPageChange;
   const theme = mergeTheme(content.theme);
@@ -900,7 +903,7 @@ export default function SitePreview({
   };
 
   return (
-    <div className="preview-root">
+    <div className={`preview-root${embedPanel ? " preview-root--embed-panel" : ""}`}>
       <link
         href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700&family=Outfit:wght@600;700&display=swap"
         rel="stylesheet"
