@@ -210,6 +210,18 @@
       if (cfg.cardIdx < numItems - 1)
         addTbBtn(null, "\u2192", function () { swapCards(cfg.cardIdx, cfg.cardIdx + 1); }, false, "cms-tb-txt");
     }
+
+    var sec = el.closest("[data-section]");
+    if (sec) {
+      var prevSec = sec.previousElementSibling;
+      var nextSec = sec.nextElementSibling;
+      if (prevSec && prevSec.hasAttribute && prevSec.hasAttribute("data-section")) {
+        addTbBtn(null, "\u25B2", function () { moveSectionUp(sec); deselect(); }, false, "cms-tb-txt");
+      }
+      if (nextSec && nextSec.hasAttribute && nextSec.hasAttribute("data-section")) {
+        addTbBtn(null, "\u25BC", function () { moveSectionDown(sec); deselect(); }, false, "cms-tb-txt");
+      }
+    }
   }
 
   function addTbBtn(icon, label, handler, isGrip, cls) {
@@ -446,6 +458,15 @@
     el.style.right = "auto"; el.style.bottom = "auto"; el.style.objectFit = "cover";
   }
 
+  function resetCropStyling(el) {
+    if (!el) return;
+    el.style.width = ""; el.style.height = ""; el.style.maxWidth = "";
+    el.style.position = ""; el.style.top = ""; el.style.left = "";
+    el.style.right = ""; el.style.bottom = ""; el.style.objectFit = "";
+    el.style.transform = ""; el.style.animation = "";
+    el.style.objectPosition = "";
+  }
+
   function applyCrop(media, pos) {
     if (!media) return;
     var x = pos ? (pos.x != null ? pos.x : 50) : 50;
@@ -453,7 +474,7 @@
     if (x !== 50 || y !== 50) {
       if (isControlledVideo(media)) {
         media.style.objectFit = "cover";
-        media.style.objectPosition = x + "% " + y + "%";
+        media.style.objectPosition = "50% " + y + "%";
       } else {
         makeCropReady(media); media.style.animation = "none";
         media.style.transform = "translate(" + ((50 - x) * 0.3) + "%, " + ((50 - y) * 0.3) + "%)";
@@ -663,10 +684,11 @@
       var dx = cx - dragState.sx, dy = cy - dragState.sy;
       var nx = clamp(dragState.px - dx * 0.15, 0, 100), ny = clamp(dragState.py - dy * 0.15, 0, 100);
       var s = snapVal(nx, ny);
-      dragState.lastX = s.x; dragState.lastY = s.y;
       if (dragState.controlled) {
-        dragState.media.style.objectPosition = s.x + "% " + s.y + "%";
+        dragState.lastX = 50; dragState.lastY = s.y;
+        dragState.media.style.objectPosition = "50% " + s.y + "%";
       } else {
+        dragState.lastX = s.x; dragState.lastY = s.y;
         dragState.media.style.transform = "translate(" + ((50 - s.x) * 0.3) + "%, " + ((50 - s.y) * 0.3) + "%)";
       }
       updateSnapUI(s.x, s.y);
@@ -718,7 +740,11 @@
 
     if (dragState.type === "crop") {
       dragState.container.classList.remove("cms-cropping");
-      var pc = {}; pc[dragState.section] = {}; pc[dragState.section][dragState.posField] = { x: Math.round(dragState.lastX), y: Math.round(dragState.lastY) };
+      var finalX = Math.round(dragState.lastX), finalY = Math.round(dragState.lastY);
+      if (finalX === 50 && finalY === 50 && !dragState.controlled) {
+        resetCropStyling(dragState.media);
+      }
+      var pc = {}; pc[dragState.section] = {}; pc[dragState.section][dragState.posField] = { x: finalX, y: finalY };
       postToParent({ type: "CMS_PATCH", source: "cms-site", pageSlug: currentSlug, patch: pc });
     } else if (dragState.type === "move") {
       dragState.el.classList.remove("cms-moving");
@@ -851,7 +877,7 @@
       '.cms-snap-crosshair { position: absolute; width: 10px; height: 10px; border: 2px solid var(--gold, #c4a55a); border-radius: 50%; transform: translate(-50%,-50%); }',
       '.cms-snap-label { position: absolute; bottom: 8px; right: 8px; padding: 2px 8px; font-size: 10px; font-family: monospace; color: var(--gold, #c4a55a); background: rgba(0,0,0,.8); border-radius: 4px; }',
 
-      '.cms-sec-bar { position: absolute; top: 10px; right: 10px; z-index: 95; display: flex; gap: 3px; }',
+      '.cms-sec-bar { position: absolute; top: 10px; right: 10px; z-index: 500; display: flex; gap: 3px; }',
       '.cms-sec-btn {',
       '  display: flex; align-items: center; justify-content: center;',
       '  width: 26px; height: 26px; padding: 0;',
@@ -865,9 +891,9 @@
       '.cms-sec-btn:hover { background: rgba(255,255,255,.12); color: #fff; }',
 
       '.service-card { position: relative; }',
-      '.service-card:hover { transform: none !important; }',
+      '.service-card:hover { transform: var(--cms-translate, none) !important; }',
       '.contact__cta { cursor: pointer; position: relative; display: inline-block; }',
-      '.contact__cta:hover { transform: none !important; }',
+      '.contact__cta:hover { transform: var(--cms-translate, none) !important; }',
       '[data-anim].is-visible { transform: var(--cms-translate, none) !important; }',
 
       '@media (max-width: 680px) {',
