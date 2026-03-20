@@ -61,4 +61,6 @@ Sans `siteUrl`, seul le gabarit d’édition React (`SitePreview`) est affiché.
 
 ## Structure du contenu (adaptable)
 
-Le fichier `content.json` à la racine du dépôt peut contenir **tout ou partie** des sections : hero, about, services, contact. Le CMS détecte les sections présentes et n’édite que celles-là ; l’ordre d’affichage est donné par `sectionOrder` (ou ordre par défaut). Voir **`PROMPT-CMS-COMPATIBLE.md`** (à la racine du repo) pour le prompt à donner à une IA qui développe un site client compatible.
+Le fichier `content.json` à la racine du dépôt peut contenir **tout ou partie** des sections : hero, about, services, contact. Le CMS détecte les sections présentes et n’édite que celles-là ; l’ordre d’affichage est donné par `sectionOrder` (ou ordre par défaut). Voir **`PROMPT-CMS-COMPATIBLE.md`** (à la racine du dépôt parent `CMS/`, à côté de `cms-app/`) : prompt complet pour une IA (schéma JSON, `cmsEmbed`, `postMessage`, IDs DOM, multi-pages, iframe).
+
+Sous **Cursor**, les règles **`.cursor/rules/cms-compatible-client-sites.mdc`** et **`content-json-cms-client.mdc`** (racine du workspace) rappellent d’appliquer ce prompt sur `mockup-site/` et les `content.json`. Vous pouvez aussi **copier `PROMPT-CMS-COMPATIBLE.md` dans le dépôt du site client** pour que l’IA du projet client ait le contrat sous la main.

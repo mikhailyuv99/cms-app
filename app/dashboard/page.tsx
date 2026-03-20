@@ -14,7 +14,6 @@ import {
 } from "@/lib/content-types";
 import SitePreview from "./SitePreview";
 
-const DEFAULT_SECTION_ORDER: SectionId[] = ["hero", "about", "services", "contact"];
 const MAX_HISTORY = 80;
 
 function trimSiteUrl(u: string) {
@@ -23,6 +22,55 @@ function trimSiteUrl(u: string) {
 
 function cloneContent(c: ContentFile): ContentFile {
   return JSON.parse(JSON.stringify(c));
+}
+
+/** Fusion profonde légère des sections (hero, about, …) pour les patches venant de l’iframe */
+function mergePatchIntoPage(page: ContentData, patch: Record<string, unknown>): ContentData {
+  const next = { ...page };
+  for (const k of Object.keys(patch)) {
+    const v = patch[k];
+    if (v === undefined) continue;
+    if (k === "sectionOrder" && Array.isArray(v)) {
+      next.sectionOrder = v as SectionId[];
+      continue;
+    }
+    if (k === "theme" && v && typeof v === "object" && !Array.isArray(v)) {
+      next.theme = { ...next.theme, ...(v as ContentData["theme"]) };
+      continue;
+    }
+    if (typeof v === "object" && v !== null && !Array.isArray(v)) {
+      const prev = (next as Record<string, unknown>)[k];
+      (next as Record<string, unknown>)[k] = {
+        ...(prev && typeof prev === "object" && !Array.isArray(prev) ? (prev as object) : {}),
+        ...(v as object),
+      };
+    } else {
+      (next as Record<string, unknown>)[k] = v;
+    }
+  }
+  return next;
+}
+
+function mergePatchIntoContentFile(
+  file: ContentFile,
+  patch: Record<string, unknown>,
+  pageSlug: string | undefined,
+): ContentFile {
+  if (!isMultiPage(file)) {
+    return mergePatchIntoPage(file as ContentData, patch);
+  }
+  const slug =
+    pageSlug && file.pages[pageSlug] !== undefined
+      ? pageSlug
+      : getPageOrder(file)[0] ?? "index";
+  const prevPage = file.pages[slug] ?? {};
+  return {
+    ...file,
+    pages: {
+      ...file.pages,
+      [slug]: mergePatchIntoPage(prevPage, patch),
+    },
+  };
 }
 
 function FullScreenLoading({ message }: { message: string }) {
@@ -58,6 +106,15 @@ export default function DashboardPage() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [iframeReady, setIframeReady] = useState(false);
   const [iframeSrc, setIframeSrc] = useState<string | null>(null);
+  /** Incrémenté pour forcer l’envoi du JSON complet à l’iframe (pas à chaque frappe inline). */
+  const [iframeSyncTick, setIframeSyncTick] = useState(0);
+
+  const contentRef = useRef(content);
+  contentRef.current = content;
+  const historyIndexRef = useRef(historyIndex);
+  historyIndexRef.current = historyIndex;
+  const currentPageSlugRef = useRef(currentPageSlug);
+  currentPageSlugRef.current = currentPageSlug;
 
   const applyPageUpdate = useCallback(
     (updater: (page: ContentData) => ContentData) => {
@@ -78,9 +135,29 @@ export default function DashboardPage() {
       });
       setHistoryIndex((i) => Math.min(i + 1, MAX_HISTORY - 1));
       setContent(newContent);
+      setIframeSyncTick((t) => t + 1);
     },
     [content, currentPageSlug, historyIndex]
   );
+
+  const applyEmbedPatch = useCallback((patch: Record<string, unknown>, msgSlug?: string) => {
+    const prev = contentRef.current;
+    if (!prev || !patch || typeof patch !== "object") return;
+    const slug = isMultiPage(prev)
+      ? msgSlug && prev.pages[msgSlug] !== undefined
+        ? msgSlug
+        : currentPageSlugRef.current
+      : undefined;
+    const newContent = mergePatchIntoContentFile(prev, patch, slug);
+    setHistory((h) => {
+      const idx = historyIndexRef.current;
+      const next = h.slice(0, idx + 1);
+      next.push(cloneContent(newContent));
+      return next.length > MAX_HISTORY ? next.slice(-MAX_HISTORY) : next;
+    });
+    setHistoryIndex((i) => Math.min(i + 1, MAX_HISTORY - 1));
+    setContent(newContent);
+  }, []);
 
   useEffect(() => {
     fetch("/api/auth/session")
@@ -148,16 +225,31 @@ export default function DashboardPage() {
     }
     const onMsg = (e: MessageEvent) => {
       if (e.origin !== siteOrigin) return;
-      if (e.data?.source === "cms-site" && e.data?.type === "CMS_READY") {
+      if (e.data?.source !== "cms-site") return;
+      if (e.data?.type === "CMS_READY") {
         setIframeReady(true);
+        return;
+      }
+      if (e.data?.type === "CMS_PAGE" && typeof e.data.slug === "string") {
+        const slug = e.data.slug as string;
+        const c = contentRef.current;
+        if (c && isMultiPage(c) && getPageOrder(c).includes(slug)) {
+          setCurrentPageSlug(slug);
+        }
+        return;
+      }
+      if (e.data?.type === "CMS_PATCH" && e.data.patch && typeof e.data.patch === "object") {
+        applyEmbedPatch(e.data.patch as Record<string, unknown>, e.data.pageSlug as string | undefined);
       }
     };
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
-  }, [session]);
+  }, [session, applyEmbedPatch]);
 
   useEffect(() => {
-    if (!content || !iframeReady || !iframeRef.current?.contentWindow || session === null || session === false || !session.siteUrl) return;
+    if (!iframeReady || !iframeRef.current?.contentWindow || session === null || session === false || !session.siteUrl) return;
+    const payload = contentRef.current;
+    if (!payload) return;
     let targetOrigin: string;
     try {
       targetOrigin = new URL(session.siteUrl).origin;
@@ -169,15 +261,15 @@ export default function DashboardPage() {
         {
           source: "cms-app",
           type: "CMS_CONTENT",
-          content: JSON.parse(JSON.stringify(content)) as ContentFile,
-          pageSlug: isMultiPage(content) ? currentPageSlug : undefined,
+          content: cloneContent(payload),
+          pageSlug: isMultiPage(payload) ? currentPageSlug : undefined,
         },
         targetOrigin,
       );
     } catch {
       /* ignore */
     }
-  }, [content, currentPageSlug, iframeReady, session]);
+  }, [iframeReady, liveIframeKey, currentPageSlug, iframeSyncTick, session]);
 
   async function handlePublish() {
     if (!content || !sha) return;
@@ -279,6 +371,7 @@ export default function DashboardPage() {
     if (isMultiPage(newContent) && !getPageOrder(newContent).includes(currentPageSlug)) {
       setCurrentPageSlug(getPageOrder(newContent)[0] ?? "index");
     }
+    setIframeSyncTick((t) => t + 1);
   }
   function handleRedo() {
     if (historyIndex >= history.length - 1 || !content) return;
@@ -289,6 +382,7 @@ export default function DashboardPage() {
     if (isMultiPage(newContent) && !getPageOrder(newContent).includes(currentPageSlug)) {
       setCurrentPageSlug(getPageOrder(newContent)[0] ?? "index");
     }
+    setIframeSyncTick((t) => t + 1);
   }
 
   function xhrPost(url: string, body: FormData | string, headers?: Record<string, string>, onProgress?: (ratio: number) => void): Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }> {
@@ -640,6 +734,28 @@ export default function DashboardPage() {
         </div>
       </header>
 
+      {showPageTabs && siteUrl && iframeSrc && (
+        <div className="sticky top-[3.25rem] z-40 border-b border-[var(--cms-border)] bg-[var(--cms-surface)] px-3 py-2">
+          <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-[var(--cms-text-muted)]">Pages</p>
+          <div className="flex flex-wrap gap-1.5">
+            {pageOrder.map((slug) => (
+              <button
+                key={slug}
+                type="button"
+                onClick={() => setCurrentPageSlug(slug)}
+                className={`rounded-md px-3 py-1 text-xs font-medium transition-colors sm:text-sm ${
+                  currentPageSlug === slug
+                    ? "bg-white text-black"
+                    : "bg-[var(--cms-bg)] text-[var(--cms-text-muted)] hover:text-[var(--cms-text)]"
+                }`}
+              >
+                {slug}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <input id="cms-upload-hero" type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="sr-only" onChange={(e) => onImageFileChange(e, "hero")} aria-label="Remplacer l'image hero" />
       <input id="cms-upload-about" type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="sr-only" onChange={(e) => onImageFileChange(e, "about")} aria-label="Remplacer l'image à propos" />
       <input id="cms-upload-hero-video" type="file" accept="video/mp4,video/webm" className="sr-only" onChange={(e) => onVideoFileChange(e, "hero-video")} aria-label="Remplacer la vidéo hero" />
@@ -678,50 +794,74 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="preview-viewport">
+      <div className="preview-viewport relative">
         {siteUrl && iframeSrc ? (
-          <div className="flex min-h-[calc(100dvh-3.25rem)] flex-col lg:flex-row">
-            <div className="flex min-h-[45vh] min-w-0 flex-1 flex-col bg-black">
+          <>
+            <div className="flex min-h-[calc(100dvh-3.25rem)] min-w-0 flex-col bg-black">
               <p className="border-b border-[var(--cms-border)] bg-[var(--cms-surface)] px-2 py-1.5 text-center text-[10px] text-[var(--cms-text-muted)] sm:text-xs">
-                Aperçu = <strong className="text-[var(--cms-text)]">le site déployé</strong> (même HTML/CSS). Mettez à jour <code className="rounded bg-[var(--cms-bg)] px-1">js/app.js</code> du site avec la prise en charge <code className="rounded bg-[var(--cms-bg)] px-1">cmsEmbed=1</code>, puis republiez.
+                Édition <strong className="text-[var(--cms-text)]">directement sur le site</strong> (cliquez sur les textes). Médias : barre ci-dessous.
               </p>
               <iframe
                 key={liveIframeKey}
                 ref={iframeRef}
                 src={iframeSrc}
                 title="Site — aperçu identique au déploiement"
-                className="h-[min(78dvh,900px)] w-full flex-1 border-0 lg:h-auto lg:min-h-[calc(100dvh-5rem)]"
+                className={
+                  showPageTabs && siteUrl && iframeSrc
+                    ? "h-[min(85dvh,920px)] w-full min-h-0 flex-1 border-0 sm:h-[calc(100dvh-12.5rem)]"
+                    : "h-[min(85dvh,920px)] w-full min-h-0 flex-1 border-0 sm:h-[calc(100dvh-8.5rem)]"
+                }
                 referrerPolicy="strict-origin-when-cross-origin"
               />
             </div>
-            <div className="flex w-full shrink-0 flex-col border-t border-[var(--cms-border)] bg-[var(--cms-bg)] lg:w-[min(100%,420px)] lg:border-l lg:border-t-0 xl:w-[min(100%,480px)]">
-              <p className="border-b border-[var(--cms-border)] px-2 py-1.5 text-[10px] font-medium text-[var(--cms-text-muted)] sm:text-xs">
-                Contrôles d’édition (textes, médias, positions) — appliqués en direct dans l’aperçu
-              </p>
-              <div className="min-h-0 flex-1 overflow-hidden">
-                <SitePreview
-                  embedPanel
-                  content={pageContent}
-                  onHero={updateHero}
-                  onAbout={updateAbout}
-                  onService={updateService}
-                  onServicesTitle={(v) => applyPageUpdate((c) => ({ ...c, services: { ...(c.services ?? { title: "", items: [] }), title: v } }))}
-                  onContact={updateContact}
-                  onVideoLoopTitle={(v) => applyPageUpdate((c) => ({ ...c, videoLoop: { ...(c.videoLoop ?? { title: "", video: "" }), title: v } }))}
-                  onVideoPlayTitle={(v) => applyPageUpdate((c) => ({ ...c, videoPlay: { ...(c.videoPlay ?? { title: "", video: "" }), title: v } }))}
-                  onSectionReorder={reorderSection}
-                  onServiceCardReorder={reorderServiceCard}
-                  onImagePosition={handleImagePosition}
-                  onContentPosition={handleContentPosition}
-                  imageCacheBust={imageCacheBust}
-                  siteUrl={siteUrl}
-                  pageOrder={showPageTabs ? pageOrder : undefined}
-                  currentPageSlug={showPageTabs ? currentPageSlug : undefined}
-                  onPageChange={showPageTabs ? setCurrentPageSlug : undefined}
-                />
+            <div className="pointer-events-none fixed bottom-0 left-0 right-0 z-30 flex justify-center p-2 sm:p-3">
+              <div className="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-1 rounded-xl border border-[var(--cms-border)] bg-[var(--cms-surface)]/95 px-2 py-2 shadow-lg backdrop-blur-sm sm:gap-2 sm:px-3">
+                <span className="hidden w-full text-center text-[10px] text-[var(--cms-text-muted)] sm:mb-0 sm:inline sm:w-auto sm:pr-2">Médias</span>
+                <label
+                  htmlFor="cms-upload-hero"
+                  className="cursor-pointer rounded-md bg-[var(--cms-bg)] px-2 py-1.5 text-[10px] font-medium text-[var(--cms-text)] hover:bg-[var(--cms-border)] sm:px-3 sm:text-xs"
+                >
+                  Image hero
+                </label>
+                <label
+                  htmlFor="cms-upload-about"
+                  className="cursor-pointer rounded-md bg-[var(--cms-bg)] px-2 py-1.5 text-[10px] font-medium text-[var(--cms-text)] hover:bg-[var(--cms-border)] sm:px-3 sm:text-xs"
+                >
+                  Image à propos
+                </label>
+                <label
+                  htmlFor="cms-upload-hero-video"
+                  className="cursor-pointer rounded-md bg-[var(--cms-bg)] px-2 py-1.5 text-[10px] font-medium text-[var(--cms-text)] hover:bg-[var(--cms-border)] sm:px-3 sm:text-xs"
+                >
+                  Vidéo hero
+                </label>
+                <label
+                  htmlFor="cms-upload-about-video"
+                  className="cursor-pointer rounded-md bg-[var(--cms-bg)] px-2 py-1.5 text-[10px] font-medium text-[var(--cms-text)] hover:bg-[var(--cms-border)] sm:px-3 sm:text-xs"
+                >
+                  Vidéo à propos
+                </label>
+                <label
+                  htmlFor="cms-upload-videoloop-video"
+                  className="cursor-pointer rounded-md bg-[var(--cms-bg)] px-2 py-1.5 text-[10px] font-medium text-[var(--cms-text)] hover:bg-[var(--cms-border)] sm:px-3 sm:text-xs"
+                >
+                  Vidéo boucle
+                </label>
+                <label
+                  htmlFor="cms-upload-videoplay-video"
+                  className="cursor-pointer rounded-md bg-[var(--cms-bg)] px-2 py-1.5 text-[10px] font-medium text-[var(--cms-text)] hover:bg-[var(--cms-border)] sm:px-3 sm:text-xs"
+                >
+                  Vidéo lecture
+                </label>
+                <label
+                  htmlFor="cms-upload-videoplay-poster"
+                  className="cursor-pointer rounded-md bg-[var(--cms-bg)] px-2 py-1.5 text-[10px] font-medium text-[var(--cms-text)] hover:bg-[var(--cms-border)] sm:px-3 sm:text-xs"
+                >
+                  Miniature lecture
+                </label>
               </div>
             </div>
-          </div>
+          </>
         ) : (
           <SitePreview
             content={pageContent}
