@@ -58,3 +58,10 @@ body {
     -webkit-overflow-scrolling: touch;
   }
 }
+
+/* Isolate site preview from dashboard chrome (no double scrollbar / width bleed) */
+.preview-viewport {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}

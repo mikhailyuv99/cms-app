@@ -54,14 +54,12 @@ const GRIP_ICON = (
   </svg>
 );
 
-const MOVE_ICON = (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-    <path d="M5 9l-3 3 3 3" />
-    <path d="M9 5l3-3 3 3" />
-    <path d="M15 19l-3 3-3-3" />
-    <path d="M19 9l3 3-3 3" />
-    <line x1="2" y1="12" x2="22" y2="12" />
-    <line x1="12" y1="2" x2="12" y2="22" />
+/** Main ouverte — déplacer texte / repère visuel */
+const HAND_ICON = (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M18 11V6a2 2 0 0 0-2-2 2 2 0 0 0-2 2" />
+    <path d="M14 10V4a2 2 0 0 0-2-2 2 2 0 0 0-2 2v2" />
+    <path d="M10 10.5V6a2 2 0 0 0-2-2 2 2 0 0 0-2 2v8.5a6 6 0 0 0 11.6 2.2" />
   </svg>
 );
 
@@ -152,75 +150,96 @@ function useImageDrag(
   const x = position?.x ?? 50;
   const y = position?.y ?? 50;
 
-  const onDown = useCallback((e: React.PointerEvent) => {
-    if (!enabled) return;
-    if ((e.target as HTMLElement).closest(".preview-media-btn, .preview-media-bar, .preview-media-bar-inline, .preview-reposition-btn, video[controls]")) return;
-    e.preventDefault();
-    e.stopPropagation();
-    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-    dragging.current = true;
-    startRef.current = { px: e.clientX, py: e.clientY, ox: x, oy: y };
-  }, [enabled, x, y]);
+  const onDown = useCallback(
+    (e: React.PointerEvent) => {
+      if (!enabled) return;
+      if (
+        (e.target as HTMLElement).closest(
+          ".preview-media-btn, .preview-media-bar, .preview-media-bar-inline, .preview-media-pan-btn, .preview-text-drag-handle, video[controls]",
+        )
+      )
+        return;
+      e.preventDefault();
+      e.stopPropagation();
+      (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+      dragging.current = true;
+      startRef.current = { px: e.clientX, py: e.clientY, ox: x, oy: y };
+    },
+    [enabled, x, y],
+  );
 
-  const onMove = useCallback((e: React.PointerEvent) => {
-    if (!dragging.current || !containerRef.current) return;
-    e.preventDefault();
-    const rect = containerRef.current.getBoundingClientRect();
-    const dx = ((e.clientX - startRef.current.px) / rect.width) * -100;
-    const dy = ((e.clientY - startRef.current.py) / rect.height) * -100;
-    const nx = Math.max(0, Math.min(100, startRef.current.ox + dx));
-    const ny = Math.max(0, Math.min(100, startRef.current.oy + dy));
-    onPosition({ x: Math.round(nx), y: Math.round(ny) });
-  }, [onPosition, containerRef]);
+  const onMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!dragging.current || !containerRef.current) return;
+      e.preventDefault();
+      const rect = containerRef.current.getBoundingClientRect();
+      const dx = ((e.clientX - startRef.current.px) / rect.width) * -100;
+      const dy = ((e.clientY - startRef.current.py) / rect.height) * -100;
+      const nx = Math.max(0, Math.min(100, startRef.current.ox + dx));
+      const ny = Math.max(0, Math.min(100, startRef.current.oy + dy));
+      onPosition({ x: Math.round(nx), y: Math.round(ny) });
+    },
+    [onPosition, containerRef],
+  );
 
-  const onUp = useCallback(() => { dragging.current = false; }, []);
+  const onUp = useCallback(() => {
+    dragging.current = false;
+  }, []);
 
   return { onPointerDown: onDown, onPointerMove: onMove, onPointerUp: onUp, onPointerCancel: onUp };
 }
 
-function useContentDrag(
+function useTextDragHandle(
   sectionRef: React.RefObject<HTMLElement | null>,
   position: Position | undefined,
   onPosition: (p: Position) => void,
-  enabled: boolean,
 ) {
   const [isDragging, setIsDragging] = useState(false);
   const [activeGuides, setActiveGuides] = useState<{ gx: number | null; gy: number | null }>({ gx: null, gy: null });
   const startRef = useRef({ px: 0, py: 0, ox: 50, oy: 50 });
 
-  const x = position?.x ?? 50;
-  const y = position?.y ?? 50;
-
-  const onDown = useCallback((e: React.PointerEvent) => {
-    if (!enabled) return;
-    if ((e.target as HTMLElement).closest("textarea, input, .preview-reposition-btn")) return;
-    e.preventDefault();
-    e.stopPropagation();
-    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-    setIsDragging(true);
-    startRef.current = { px: e.clientX, py: e.clientY, ox: x, oy: y };
-  }, [enabled, x, y]);
-
-  const onMove = useCallback((e: React.PointerEvent) => {
-    if (!isDragging || !sectionRef.current) return;
-    e.preventDefault();
-    const rect = sectionRef.current.getBoundingClientRect();
-    const dx = ((e.clientX - startRef.current.px) / rect.width) * 100;
-    const dy = ((e.clientY - startRef.current.py) / rect.height) * 100;
-    const rawX = Math.max(0, Math.min(100, startRef.current.ox + dx));
-    const rawY = Math.max(0, Math.min(100, startRef.current.oy + dy));
-    const sx = snap(rawX, SNAP_THRESHOLD, rect.width);
-    const sy = snap(rawY, SNAP_THRESHOLD, rect.height);
-    setActiveGuides({ gx: sx.guide, gy: sy.guide });
-    onPosition({ x: Math.round(sx.value * 10) / 10, y: Math.round(sy.value * 10) / 10 });
+  useEffect(() => {
+    if (!isDragging) return;
+    const onMove = (e: PointerEvent) => {
+      const el = sectionRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const dx = ((e.clientX - startRef.current.px) / rect.width) * 100;
+      const dy = ((e.clientY - startRef.current.py) / rect.height) * 100;
+      const rawX = Math.max(0, Math.min(100, startRef.current.ox + dx));
+      const rawY = Math.max(0, Math.min(100, startRef.current.oy + dy));
+      const sx = snap(rawX, SNAP_THRESHOLD, rect.width);
+      const sy = snap(rawY, SNAP_THRESHOLD, rect.height);
+      setActiveGuides({ gx: sx.guide, gy: sy.guide });
+      onPosition({ x: Math.round(sx.value * 10) / 10, y: Math.round(sy.value * 10) / 10 });
+    };
+    const onUp = () => {
+      setIsDragging(false);
+      setActiveGuides({ gx: null, gy: null });
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+    document.addEventListener("pointercancel", onUp);
+    return () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      document.removeEventListener("pointercancel", onUp);
+    };
   }, [isDragging, onPosition, sectionRef]);
 
-  const onUp = useCallback(() => {
-    setIsDragging(false);
-    setActiveGuides({ gx: null, gy: null });
-  }, []);
+  const onHandlePointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const ox = position?.x ?? 50;
+      const oy = position?.y ?? 50;
+      startRef.current = { px: e.clientX, py: e.clientY, ox, oy };
+      setIsDragging(true);
+    },
+    [position],
+  );
 
-  return { isDragging, activeGuides, onPointerDown: onDown, onPointerMove: onMove, onPointerUp: onUp, onPointerCancel: onUp };
+  return { isDragging, activeGuides, onHandlePointerDown };
 }
 
 function AlignmentGuides({ activeGuides }: { activeGuides: { gx: number | null; gy: number | null } }) {
@@ -261,6 +280,17 @@ function pageLabel(slug: string): string {
   return slug.charAt(0).toUpperCase() + slug.slice(1).replace(/-/g, " ");
 }
 
+function contentPosStyle(pos?: Position): React.CSSProperties | undefined {
+  if (!pos) return undefined;
+  return {
+    position: "absolute",
+    left: `${pos.x}%`,
+    top: `${pos.y}%`,
+    transform: "translate(-50%, -50%)",
+    zIndex: 2,
+  };
+}
+
 export default function SitePreview({
   content,
   onHero,
@@ -289,16 +319,29 @@ export default function SitePreview({
   const videoLoopRef = useRef<HTMLElement>(null);
   const videoPlayRef = useRef<HTMLElement>(null);
   const contactRef = useRef<HTMLElement>(null);
+  const servicesRef = useRef<HTMLElement>(null);
 
   const heroMediaRef = useRef<HTMLDivElement>(null);
   const aboutMediaRef = useRef<HTMLDivElement>(null);
   const videoLoopMediaRef = useRef<HTMLDivElement>(null);
+  const videoPlayMediaRef = useRef<HTMLDivElement>(null);
 
-  const [repositionSection, setRepositionSection] = useState<SectionId | null>(null);
-
-  const toggleReposition = useCallback((section: SectionId) => {
-    setRepositionSection((prev) => (prev === section ? null : section));
+  const [mediaPanSection, setMediaPanSection] = useState<SectionId | null>(null);
+  const toggleMediaPan = useCallback((id: SectionId) => {
+    setMediaPanSection((prev) => (prev === id ? null : id));
   }, []);
+
+  const heroTextDrag = useTextDragHandle(heroRef, content.hero?.contentPosition, (p) => onContentPosition("hero", p));
+  const aboutTextDrag = useTextDragHandle(aboutRef, content.about?.contentPosition, (p) => onContentPosition("about", p));
+  const videoLoopTextDrag = useTextDragHandle(videoLoopRef, content.videoLoop?.contentPosition, (p) => onContentPosition("videoLoop", p));
+  const videoPlayTextDrag = useTextDragHandle(videoPlayRef, content.videoPlay?.contentPosition, (p) => onContentPosition("videoPlay", p));
+  const contactTextDrag = useTextDragHandle(contactRef, content.contact?.contentPosition, (p) => onContentPosition("contact", p));
+  const servicesTextDrag = useTextDragHandle(servicesRef, content.services?.contentPosition, (p) => onContentPosition("services", p));
+
+  const heroImgDrag = useImageDrag(heroMediaRef, content.hero?.imagePosition, (p) => onImagePosition("hero", p), mediaPanSection === "hero");
+  const aboutImgDrag = useImageDrag(aboutMediaRef, content.about?.imagePosition, (p) => onImagePosition("about", p), mediaPanSection === "about");
+  const videoLoopImgDrag = useImageDrag(videoLoopMediaRef, content.videoLoop?.imagePosition, (p) => onImagePosition("videoLoop", p), mediaPanSection === "videoLoop");
+  const videoPlayImgDrag = useImageDrag(videoPlayMediaRef, content.videoPlay?.imagePosition, (p) => onImagePosition("videoPlay", p), mediaPanSection === "videoPlay");
 
   const [dragOverSection, setDragOverSection] = useState<number | null>(null);
   const [dragOverCard, setDragOverCard] = useState<number | null>(null);
@@ -307,16 +350,6 @@ export default function SitePreview({
   const scrollRAF = useRef<number | null>(null);
   const pointerKindRef = useRef<"section" | "card" | null>(null);
   const pointerFromRef = useRef<number>(0);
-
-  const heroImgDrag = useImageDrag(heroMediaRef, content.hero?.imagePosition, (p) => onImagePosition("hero", p), repositionSection === "hero");
-  const aboutImgDrag = useImageDrag(aboutMediaRef, content.about?.imagePosition, (p) => onImagePosition("about", p), repositionSection === "about");
-  const videoLoopImgDrag = useImageDrag(videoLoopMediaRef, content.videoLoop?.imagePosition, (p) => onImagePosition("videoLoop", p), repositionSection === "videoLoop");
-
-  const heroTextDrag = useContentDrag(heroRef, content.hero?.contentPosition, (p) => onContentPosition("hero", p), repositionSection === "hero");
-  const aboutTextDrag = useContentDrag(aboutRef, content.about?.contentPosition, (p) => onContentPosition("about", p), repositionSection === "about");
-  const videoLoopTextDrag = useContentDrag(videoLoopRef, content.videoLoop?.contentPosition, (p) => onContentPosition("videoLoop", p), repositionSection === "videoLoop");
-  const videoPlayTextDrag = useContentDrag(videoPlayRef, content.videoPlay?.contentPosition, (p) => onContentPosition("videoPlay", p), repositionSection === "videoPlay");
-  const contactTextDrag = useContentDrag(contactRef, content.contact?.contentPosition, (p) => onContentPosition("contact", p), repositionSection === "contact");
 
   const doScroll = useCallback((clientY: number) => {
     const ZONE = 120;
@@ -380,7 +413,7 @@ export default function SitePreview({
       document.addEventListener("pointerup", onUp, { capture: true });
       document.addEventListener("pointercancel", onUp, { capture: true });
     },
-    [onSectionReorder, onServiceCardReorder, doScroll]
+    [onSectionReorder, onServiceCardReorder, doScroll],
   );
 
   const handleSectionPointerDown = (e: React.PointerEvent, index: number) => {
@@ -398,51 +431,110 @@ export default function SitePreview({
     return `${pos?.x ?? 50}% ${pos?.y ?? 50}%`;
   }
 
-  function contentPosStyle(pos?: Position, active?: boolean): React.CSSProperties | undefined {
-    if (!pos && !active) return undefined;
-    if (pos) return { position: "absolute", left: `${pos.x}%`, top: `${pos.y}%`, transform: "translate(-50%, -50%)", zIndex: 2, cursor: active ? "grab" : undefined };
-    return { cursor: "grab", zIndex: 2 };
+  function mediaPanBtn(id: SectionId) {
+    const active = mediaPanSection === id;
+    return (
+      <button
+        type="button"
+        className={`preview-media-btn preview-media-pan-btn${active ? " active" : ""}`}
+        title="Activer le déplacement du média dans le cadre (cliquer puis glisser sur l’image ou la vidéo)"
+        aria-label="Déplacer le média dans le cadre"
+        aria-pressed={active}
+        onClick={() => toggleMediaPan(id)}
+      >
+        {HAND_ICON}
+      </button>
+    );
   }
 
-  const isRepos = (s: SectionId) => repositionSection === s;
+  function textDragBtn(drag: ReturnType<typeof useTextDragHandle>) {
+    return (
+      <button
+        type="button"
+        className="preview-text-drag-handle"
+        title="Maintenir et glisser pour déplacer le bloc de texte"
+        aria-label="Déplacer le bloc de texte"
+        onPointerDown={drag.onHandlePointerDown}
+      >
+        {HAND_ICON}
+      </button>
+    );
+  }
 
   const sections: Record<SectionId, React.ReactNode | null> = {
     hero: content.hero ? (
       <header key="hero" className="preview-hero" ref={heroRef as React.Ref<HTMLElement>}>
-        <div className="preview-hero__bg" />
-        <div
-          className="preview-hero__media"
-          ref={heroMediaRef}
-          style={isRepos("hero") ? { cursor: "grab" } : undefined}
-          {...(isRepos("hero") ? heroImgDrag : {})}
-        >
-          {content.hero.video ? (
-            <HeroVideo className="preview-hero__image" style={{ objectPosition: objPos(content.hero.imagePosition) }} poster={imageSrc(content.hero.image, siteUrl, imageCacheBust)} src={imageSrc(content.hero.video, siteUrl, imageCacheBust)} />
-          ) : content.hero.imageAvif || content.hero.imageWebp ? (
-            <picture>
-              {content.hero.imageAvif && <source type="image/avif" srcSet={imageSrc(content.hero.imageAvif, siteUrl, imageCacheBust)} />}
-              {content.hero.imageWebp && <source type="image/webp" srcSet={imageSrc(content.hero.imageWebp, siteUrl, imageCacheBust)} />}
-              <img className="preview-hero__image" style={{ objectPosition: objPos(content.hero.imagePosition) }} src={imageSrc(content.hero.image, siteUrl, imageCacheBust)} alt="" loading="eager" decoding="async" fetchPriority="high" />
-            </picture>
-          ) : (
-            <img className="preview-hero__image" style={{ objectPosition: objPos(content.hero.imagePosition) }} src={imageSrc(content.hero.image, siteUrl, imageCacheBust)} alt="" loading="eager" decoding="async" fetchPriority="high" />
-          )}
+        <div className="preview-hero__bg">
+          <div
+            className="preview-hero__media"
+            ref={heroMediaRef}
+            style={mediaPanSection === "hero" ? { cursor: "grab" } : undefined}
+            {...(mediaPanSection === "hero" ? heroImgDrag : {})}
+          >
+            {content.hero.video ? (
+              <HeroVideo
+                className="preview-hero__image"
+                style={{ objectPosition: objPos(content.hero.imagePosition) }}
+                poster={imageSrc(content.hero.image, siteUrl, imageCacheBust)}
+                src={imageSrc(content.hero.video, siteUrl, imageCacheBust)}
+              />
+            ) : content.hero.imageAvif || content.hero.imageWebp ? (
+              <picture>
+                {content.hero.imageAvif && <source type="image/avif" srcSet={imageSrc(content.hero.imageAvif, siteUrl, imageCacheBust)} />}
+                {content.hero.imageWebp && <source type="image/webp" srcSet={imageSrc(content.hero.imageWebp, siteUrl, imageCacheBust)} />}
+                <img
+                  className="preview-hero__image"
+                  style={{ objectPosition: objPos(content.hero.imagePosition) }}
+                  src={imageSrc(content.hero.image, siteUrl, imageCacheBust)}
+                  alt=""
+                  loading="eager"
+                  decoding="async"
+                  fetchPriority="high"
+                />
+              </picture>
+            ) : (
+              <img
+                className="preview-hero__image"
+                style={{ objectPosition: objPos(content.hero.imagePosition) }}
+                src={imageSrc(content.hero.image, siteUrl, imageCacheBust)}
+                alt=""
+                loading="eager"
+                decoding="async"
+                fetchPriority="high"
+              />
+            )}
+          </div>
         </div>
-        {isRepos("hero") && heroTextDrag.isDragging && <AlignmentGuides activeGuides={heroTextDrag.activeGuides} />}
-        <div
-          className="preview-hero__content"
-          style={contentPosStyle(content.hero.contentPosition, isRepos("hero"))}
-          {...(isRepos("hero") ? { onPointerDown: heroTextDrag.onPointerDown, onPointerMove: heroTextDrag.onPointerMove, onPointerUp: heroTextDrag.onPointerUp, onPointerCancel: heroTextDrag.onPointerCancel } : {})}
-        >
-          <AutoTextarea className="preview-input preview-hero__title" style={{ color: theme.heroTitle }} value={content.hero.title} onChange={(v) => onHero("title", v)} placeholder="Titre" aria-label="Titre hero" />
-          <AutoTextarea className="preview-input preview-hero__subtitle" style={{ color: theme.heroSubtitle }} value={content.hero.subtitle} onChange={(v) => onHero("subtitle", v)} placeholder="Sous-titre" aria-label="Sous-titre hero" />
+        {heroTextDrag.isDragging && <AlignmentGuides activeGuides={heroTextDrag.activeGuides} />}
+        <div className="preview-hero__content preview-text-block" style={contentPosStyle(content.hero.contentPosition)}>
+          {textDragBtn(heroTextDrag)}
+          <AutoTextarea
+            className="preview-input preview-hero__title"
+            style={{ color: theme.heroTitle }}
+            value={content.hero.title}
+            onChange={(v) => onHero("title", v)}
+            placeholder="Titre"
+            aria-label="Titre hero"
+          />
+          <AutoTextarea
+            className="preview-input preview-hero__subtitle"
+            style={{ color: theme.heroSubtitle }}
+            value={content.hero.subtitle}
+            onChange={(v) => onHero("subtitle", v)}
+            placeholder="Sous-titre"
+            aria-label="Sous-titre hero"
+          />
         </div>
         <div className="preview-media-bar">
-          <label htmlFor={UPLOAD_HERO_ID} className="preview-media-btn">Modifier image</label>
-          {content.hero.video && <label htmlFor={UPLOAD_HERO_VIDEO_ID} className="preview-media-btn">Modifier vidéo</label>}
-          <button type="button" className={`preview-media-btn preview-reposition-btn${isRepos("hero") ? " active" : ""}`} onClick={() => toggleReposition("hero")}>
-            {MOVE_ICON} {isRepos("hero") ? "Terminé" : "Repositionner"}
-          </button>
+          <label htmlFor={UPLOAD_HERO_ID} className="preview-media-btn">
+            Remplacer l’image
+          </label>
+          {content.hero.video && (
+            <label htmlFor={UPLOAD_HERO_VIDEO_ID} className="preview-media-btn">
+              Remplacer la vidéo
+            </label>
+          )}
+          {mediaPanBtn("hero")}
         </div>
       </header>
     ) : null,
@@ -453,51 +545,93 @@ export default function SitePreview({
           <div
             className="preview-about__media"
             ref={aboutMediaRef}
-            style={isRepos("about") ? { cursor: "grab" } : undefined}
-            {...(isRepos("about") ? aboutImgDrag : {})}
+            style={mediaPanSection === "about" ? { cursor: "grab" } : undefined}
+            {...(mediaPanSection === "about" ? aboutImgDrag : {})}
           >
             {content.about.video ? (
-              <video className="preview-about__image" style={{ objectPosition: objPos(content.about.imagePosition) }} poster={imageSrc(content.about.image, siteUrl, imageCacheBust)} src={imageSrc(content.about.video, siteUrl, imageCacheBust)} muted loop playsInline controls />
+              <video
+                className="preview-about__image"
+                style={{ objectFit: "cover", objectPosition: objPos(content.about.imagePosition) }}
+                poster={imageSrc(content.about.image, siteUrl, imageCacheBust)}
+                src={imageSrc(content.about.video, siteUrl, imageCacheBust)}
+                muted
+                loop
+                playsInline
+                controls
+              />
             ) : content.about.imageAvif || content.about.imageWebp ? (
               <picture>
                 {content.about.imageAvif && <source type="image/avif" srcSet={imageSrc(content.about.imageAvif, siteUrl, imageCacheBust)} />}
                 {content.about.imageWebp && <source type="image/webp" srcSet={imageSrc(content.about.imageWebp, siteUrl, imageCacheBust)} />}
-                <img className="preview-about__image" style={{ objectPosition: objPos(content.about.imagePosition) }} src={imageSrc(content.about.image, siteUrl, imageCacheBust)} alt="" loading="eager" decoding="async" />
+                <img
+                  className="preview-about__image"
+                  style={{ objectPosition: objPos(content.about.imagePosition) }}
+                  src={imageSrc(content.about.image, siteUrl, imageCacheBust)}
+                  alt=""
+                  loading="eager"
+                  decoding="async"
+                />
               </picture>
             ) : (
-              <img className="preview-about__image" style={{ objectPosition: objPos(content.about.imagePosition) }} src={imageSrc(content.about.image, siteUrl, imageCacheBust)} alt="" loading="eager" decoding="async" />
+              <img
+                className="preview-about__image"
+                style={{ objectPosition: objPos(content.about.imagePosition) }}
+                src={imageSrc(content.about.image, siteUrl, imageCacheBust)}
+                alt=""
+                loading="eager"
+                decoding="async"
+              />
             )}
             <div className="preview-media-bar-inline">
-              <label htmlFor={UPLOAD_ABOUT_ID} className="preview-media-btn">Modifier image</label>
-              {content.about.video && <label htmlFor={UPLOAD_ABOUT_VIDEO_ID} className="preview-media-btn">Modifier vidéo</label>}
-              <button type="button" className={`preview-media-btn preview-reposition-btn${isRepos("about") ? " active" : ""}`} onClick={() => toggleReposition("about")}>
-                {MOVE_ICON} {isRepos("about") ? "Terminé" : "Repositionner"}
-              </button>
+              <label htmlFor={UPLOAD_ABOUT_ID} className="preview-media-btn">
+                Remplacer l’image
+              </label>
+              {content.about.video && (
+                <label htmlFor={UPLOAD_ABOUT_VIDEO_ID} className="preview-media-btn">
+                  Remplacer la vidéo
+                </label>
+              )}
+              {mediaPanBtn("about")}
             </div>
           </div>
-          {isRepos("about") && aboutTextDrag.isDragging && <AlignmentGuides activeGuides={aboutTextDrag.activeGuides} />}
-          <div
-            className="preview-about__text"
-            style={contentPosStyle(content.about.contentPosition, isRepos("about"))}
-            {...(isRepos("about") ? { onPointerDown: aboutTextDrag.onPointerDown, onPointerMove: aboutTextDrag.onPointerMove, onPointerUp: aboutTextDrag.onPointerUp, onPointerCancel: aboutTextDrag.onPointerCancel } : {})}
-          >
-            <AutoTextarea className="preview-input preview-about__title" style={{ color: theme.aboutTitle }} value={content.about.title} onChange={(v) => onAbout("title", v)} placeholder="Titre" aria-label="Titre à propos" />
-            <AutoTextarea className="preview-input preview-about__body" style={{ color: theme.aboutText }} value={content.about.text} onChange={(v) => onAbout("text", v)} placeholder="Texte" aria-label="Texte à propos" />
+          {aboutTextDrag.isDragging && <AlignmentGuides activeGuides={aboutTextDrag.activeGuides} />}
+          <div className="preview-about__text preview-text-block" style={contentPosStyle(content.about.contentPosition)}>
+            {textDragBtn(aboutTextDrag)}
+            <AutoTextarea
+              className="preview-input preview-about__title"
+              style={{ color: theme.aboutTitle }}
+              value={content.about.title}
+              onChange={(v) => onAbout("title", v)}
+              placeholder="Titre"
+              aria-label="Titre à propos"
+            />
+            <AutoTextarea
+              className="preview-input preview-about__body"
+              style={{ color: theme.aboutText }}
+              value={content.about.text}
+              onChange={(v) => onAbout("text", v)}
+              placeholder="Texte"
+              aria-label="Texte à propos"
+            />
           </div>
         </div>
       </section>
     ) : null,
 
     services: content.services ? (
-      <section key="services" className="preview-services" style={{ background: theme.servicesBg }}>
-        <AutoTextarea
-          className="preview-input preview-services__title"
-          style={{ color: theme.servicesTitle }}
-          value={content.services.title}
-          onChange={onServicesTitle}
-          placeholder="Titre services"
-          aria-label="Titre services"
-        />
+      <section key="services" className="preview-services" ref={servicesRef as React.Ref<HTMLElement>} style={{ background: theme.servicesBg }}>
+        {servicesTextDrag.isDragging && <AlignmentGuides activeGuides={servicesTextDrag.activeGuides} />}
+        <div className="preview-text-block" style={contentPosStyle(content.services.contentPosition)}>
+          {textDragBtn(servicesTextDrag)}
+          <AutoTextarea
+            className="preview-input preview-services__title"
+            style={{ color: theme.servicesTitle }}
+            value={content.services.title}
+            onChange={onServicesTitle}
+            placeholder="Titre services"
+            aria-label="Titre services"
+          />
+        </div>
         <div className="preview-services__list">
           {content.services.items.map((item, i) => (
             <div
@@ -549,73 +683,125 @@ export default function SitePreview({
         <div
           className="preview-video-loop__media"
           ref={videoLoopMediaRef}
-          style={isRepos("videoLoop") ? { cursor: "grab" } : undefined}
-          {...(isRepos("videoLoop") ? videoLoopImgDrag : {})}
+          style={mediaPanSection === "videoLoop" ? { cursor: "grab" } : undefined}
+          {...(mediaPanSection === "videoLoop" ? videoLoopImgDrag : {})}
         >
           {content.videoLoop.video && (
-            <HeroVideo className="preview-video-loop__video" style={{ objectPosition: objPos(content.videoLoop.imagePosition) }} src={imageSrc(content.videoLoop.video, siteUrl, imageCacheBust)} poster="" />
+            <HeroVideo
+              className="preview-video-loop__video"
+              style={{ objectPosition: objPos(content.videoLoop.imagePosition) }}
+              src={imageSrc(content.videoLoop.video, siteUrl, imageCacheBust)}
+              poster=""
+            />
           )}
         </div>
-        {isRepos("videoLoop") && videoLoopTextDrag.isDragging && <AlignmentGuides activeGuides={videoLoopTextDrag.activeGuides} />}
-        <div
-          style={contentPosStyle(content.videoLoop.contentPosition, isRepos("videoLoop"))}
-          {...(isRepos("videoLoop") ? { onPointerDown: videoLoopTextDrag.onPointerDown, onPointerMove: videoLoopTextDrag.onPointerMove, onPointerUp: videoLoopTextDrag.onPointerUp, onPointerCancel: videoLoopTextDrag.onPointerCancel } : {})}
-        >
-          <AutoTextarea className="preview-input preview-video-loop__title" value={content.videoLoop.title} onChange={onVideoLoopTitle} placeholder="Titre" aria-label="Titre vidéo boucle" />
+        {videoLoopTextDrag.isDragging && <AlignmentGuides activeGuides={videoLoopTextDrag.activeGuides} />}
+        <div className="preview-text-block" style={contentPosStyle(content.videoLoop.contentPosition)}>
+          {textDragBtn(videoLoopTextDrag)}
+          <AutoTextarea
+            className="preview-input preview-video-loop__title"
+            value={content.videoLoop.title}
+            onChange={onVideoLoopTitle}
+            placeholder="Titre"
+            aria-label="Titre vidéo boucle"
+          />
         </div>
         <div className="preview-media-bar">
-          <label htmlFor="cms-upload-videoloop-video" className="preview-media-btn">Modifier vidéo</label>
-          <button type="button" className={`preview-media-btn preview-reposition-btn${isRepos("videoLoop") ? " active" : ""}`} onClick={() => toggleReposition("videoLoop")}>
-            {MOVE_ICON} {isRepos("videoLoop") ? "Terminé" : "Repositionner"}
-          </button>
+          <label htmlFor="cms-upload-videoloop-video" className="preview-media-btn">
+            Remplacer la vidéo
+          </label>
+          {mediaPanBtn("videoLoop")}
         </div>
       </section>
     ) : null,
 
     videoPlay: content.videoPlay ? (
       <section key="videoPlay" className="preview-video-play" ref={videoPlayRef as React.Ref<HTMLElement>}>
-        {isRepos("videoPlay") && videoPlayTextDrag.isDragging && <AlignmentGuides activeGuides={videoPlayTextDrag.activeGuides} />}
-        <div
-          style={contentPosStyle(content.videoPlay.contentPosition, isRepos("videoPlay"))}
-          {...(isRepos("videoPlay") ? { onPointerDown: videoPlayTextDrag.onPointerDown, onPointerMove: videoPlayTextDrag.onPointerMove, onPointerUp: videoPlayTextDrag.onPointerUp, onPointerCancel: videoPlayTextDrag.onPointerCancel } : {})}
-        >
-          <AutoTextarea className="preview-input preview-video-play__title" value={content.videoPlay.title} onChange={onVideoPlayTitle} placeholder="Titre" aria-label="Titre vidéo lecture" />
+        {videoPlayTextDrag.isDragging && <AlignmentGuides activeGuides={videoPlayTextDrag.activeGuides} />}
+        <div className="preview-text-block" style={contentPosStyle(content.videoPlay.contentPosition)}>
+          {textDragBtn(videoPlayTextDrag)}
+          <AutoTextarea
+            className="preview-input preview-video-play__title"
+            value={content.videoPlay.title}
+            onChange={onVideoPlayTitle}
+            placeholder="Titre"
+            aria-label="Titre vidéo lecture"
+          />
         </div>
-        <div className="preview-video-play__media">
+        <div
+          className="preview-video-play__media"
+          ref={videoPlayMediaRef}
+          style={mediaPanSection === "videoPlay" ? { cursor: "grab" } : undefined}
+          {...(mediaPanSection === "videoPlay" ? videoPlayImgDrag : {})}
+        >
           {content.videoPlay.video ? (
-            <video className="preview-video-play__video" style={{ objectPosition: objPos(content.videoPlay.imagePosition) }} src={imageSrc(content.videoPlay.video, siteUrl, imageCacheBust)} poster={content.videoPlay.poster ? imageSrc(content.videoPlay.poster, siteUrl, imageCacheBust) : undefined} controls playsInline preload="metadata" />
+            <video
+              className="preview-video-play__video"
+              style={{ objectPosition: objPos(content.videoPlay.imagePosition) }}
+              src={imageSrc(content.videoPlay.video, siteUrl, imageCacheBust)}
+              poster={content.videoPlay.poster ? imageSrc(content.videoPlay.poster, siteUrl, imageCacheBust) : undefined}
+              controls
+              playsInline
+              preload="metadata"
+            />
           ) : (
-            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#666" }}>Aucune vidéo</div>
+            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#666" }}>
+              Aucune vidéo
+            </div>
           )}
         </div>
         <div className="preview-media-bar-inline">
-          <label htmlFor="cms-upload-videoplay-video" className="preview-media-btn">Modifier vidéo</label>
-          <label htmlFor="cms-upload-videoplay-poster" className="preview-media-btn">Modifier miniature</label>
-          <button type="button" className={`preview-media-btn preview-reposition-btn${isRepos("videoPlay") ? " active" : ""}`} onClick={() => toggleReposition("videoPlay")}>
-            {MOVE_ICON} {isRepos("videoPlay") ? "Terminé" : "Repositionner"}
-          </button>
+          <label htmlFor="cms-upload-videoplay-video" className="preview-media-btn">
+            Remplacer la vidéo
+          </label>
+          <label htmlFor="cms-upload-videoplay-poster" className="preview-media-btn">
+            Remplacer la miniature
+          </label>
+          {mediaPanBtn("videoPlay")}
         </div>
       </section>
     ) : null,
 
     contact: content.contact ? (
       <section key="contact" className="preview-contact" ref={contactRef as React.Ref<HTMLElement>}>
-        {isRepos("contact") && contactTextDrag.isDragging && <AlignmentGuides activeGuides={contactTextDrag.activeGuides} />}
-        <div
-          style={contentPosStyle(content.contact.contentPosition, isRepos("contact"))}
-          {...(isRepos("contact") ? { onPointerDown: contactTextDrag.onPointerDown, onPointerMove: contactTextDrag.onPointerMove, onPointerUp: contactTextDrag.onPointerUp, onPointerCancel: contactTextDrag.onPointerCancel } : {})}
-        >
-          <AutoTextarea className="preview-input preview-contact__title" style={{ color: theme.contactTitle }} value={content.contact.title} onChange={(v) => onContact("title", v)} placeholder="Titre contact" aria-label="Titre contact" />
-          <AutoTextarea className="preview-input preview-contact__text" style={{ color: theme.contactText }} value={content.contact.text} onChange={(v) => onContact("text", v)} placeholder="Texte" aria-label="Texte contact" />
+        {contactTextDrag.isDragging && <AlignmentGuides activeGuides={contactTextDrag.activeGuides} />}
+        <div className="preview-text-block" style={contentPosStyle(content.contact.contentPosition)}>
+          {textDragBtn(contactTextDrag)}
+          <AutoTextarea
+            className="preview-input preview-contact__title"
+            style={{ color: theme.contactTitle }}
+            value={content.contact.title}
+            onChange={(v) => onContact("title", v)}
+            placeholder="Titre contact"
+            aria-label="Titre contact"
+          />
+          <AutoTextarea
+            className="preview-input preview-contact__text"
+            style={{ color: theme.contactText }}
+            value={content.contact.text}
+            onChange={(v) => onContact("text", v)}
+            placeholder="Texte"
+            aria-label="Texte contact"
+          />
           <span className="preview-contact__cta" style={{ background: theme.contactButtonBg, color: theme.contactButtonText }}>
-            <input className="preview-input preview-contact__cta-input" value={content.contact.buttonLabel} onChange={(e) => onContact("buttonLabel", e.target.value)} placeholder="Bouton" aria-label="Libellé bouton" style={{ color: theme.contactButtonText }} />
+            <input
+              className="preview-input preview-contact__cta-input"
+              value={content.contact.buttonLabel}
+              onChange={(e) => onContact("buttonLabel", e.target.value)}
+              placeholder="Bouton"
+              aria-label="Libellé bouton"
+              style={{ color: theme.contactButtonText }}
+            />
           </span>
-          <input type="email" className="preview-input preview-contact__email" style={{ color: theme.contactText }} value={content.contact.email} onChange={(e) => onContact("email", e.target.value)} placeholder="Email" aria-label="Email contact" />
-        </div>
-        <div className="preview-media-bar-inline" style={{ marginTop: "1rem" }}>
-          <button type="button" className={`preview-media-btn preview-reposition-btn${isRepos("contact") ? " active" : ""}`} onClick={() => toggleReposition("contact")}>
-            {MOVE_ICON} {isRepos("contact") ? "Terminé" : "Repositionner"}
-          </button>
+          <input
+            type="email"
+            className="preview-input preview-contact__email"
+            style={{ color: theme.contactText }}
+            value={content.contact.email}
+            onChange={(e) => onContact("email", e.target.value)}
+            placeholder="Email"
+            aria-label="Email contact"
+          />
         </div>
       </section>
     ) : null,
@@ -664,7 +850,7 @@ export default function SitePreview({
               </span>
               {sections[id]}
             </div>
-          ) : null
+          ) : null,
         )}
       </main>
     </div>
