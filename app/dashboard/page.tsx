@@ -12,6 +12,7 @@ import {
   type SectionId,
   type Position,
 } from "@/lib/content-types";
+import { absolutizeContentMediaForEmbed } from "@/lib/resolve-site-media-urls";
 import SitePreview from "./SitePreview";
 
 const MAX_HISTORY = 80;
@@ -271,11 +272,14 @@ export default function DashboardPage() {
       return;
     }
     try {
+      const siteUrl = session.siteUrl;
+      const contentForIframe =
+        siteUrl ? absolutizeContentMediaForEmbed(payload, siteUrl) : cloneContent(payload);
       iframeRef.current.contentWindow.postMessage(
         {
           source: "cms-app",
           type: "CMS_CONTENT",
-          content: cloneContent(payload),
+          content: contentForIframe,
           pageSlug: isMultiPage(payload) ? currentPageSlug : undefined,
         },
         targetOrigin,
