@@ -10,5 +10,11 @@
     "passwordHash": "$2a$10$5uq17jZCI21IzXE8E7lOieAw2cXEXaYuaZWhiMoAG8XTRPs/DMGle",
     "siteUrl": "https://bejewelled-pegasus-95efdc.netlify.app",
     "name": "OBSCURA"
+  },
+  {
+    "repo": "mikhailyuv99/le-royal-monaco",
+    "passwordHash": "$2a$10$pT6lPc.QJOIw26chBs8rUu3KaN2qhMPZkOBgXAaoJKnY2X6rKE59K",
+    "siteUrl": "",
+    "name": "Le Royal Monaco"
   }
 ]
