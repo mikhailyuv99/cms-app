@@ -106,6 +106,7 @@ export default function DashboardPage() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   /** Maps relative file paths to preview URLs (raw GitHub) for instant display after upload */
   const previewOverridesRef = useRef(new Map<string, string>());
+  const pendingUploadRef = useRef<{ section: string; field: string; mediaType: string }>({ section: "", field: "image", mediaType: "image" });
 
   const contentRef = useRef(content);
   contentRef.current = content;
@@ -227,17 +228,15 @@ export default function DashboardPage() {
       }
 
       if (e.data.type === "CMS_UPLOAD_REQUEST" && typeof e.data.uploadKey === "string") {
-        const map: Record<string, string> = {
-          hero: "cms-upload-hero",
-          about: "cms-upload-about",
-          "hero-video": "cms-upload-hero-video",
-          "about-video": "cms-upload-about-video",
-          "videoLoop-video": "cms-upload-videoloop-video",
-          "videoPlay-video": "cms-upload-videoplay-video",
-          "videoPlay-poster": "cms-upload-videoplay-poster",
-        };
-        const id = map[e.data.uploadKey];
-        if (id) document.getElementById(id)?.click();
+        const section = e.data.section as string || "";
+        const field = e.data.field as string || "image";
+        const mediaType = e.data.mediaType as string || "image";
+        pendingUploadRef.current = { section, field, mediaType };
+        if (mediaType === "video") {
+          document.getElementById("cms-upload-video")?.click();
+        } else {
+          document.getElementById("cms-upload-image")?.click();
+        }
         return;
       }
 
@@ -434,16 +433,17 @@ export default function DashboardPage() {
     return { path: filePath, rawUrl };
   }
 
-  async function onImageFileChange(e: React.ChangeEvent<HTMLInputElement>, key: "hero" | "about") {
+  async function onGenericImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file || !content) return;
-    setUploadingMedia(key);
+    const { section, field } = pendingUploadRef.current;
+    setUploadingMedia(section + "-" + field);
     setUploadProgress(0);
     try {
       const form = new FormData();
       form.append("file", file);
-      form.append("key", key);
+      form.append("key", section + "-" + field);
       const res = await xhrPost("/api/upload-image", form, undefined, (r) => setUploadProgress(r));
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -456,12 +456,12 @@ export default function DashboardPage() {
       if (data.pathAvif) previewOverridesRef.current.set(data.pathAvif, data.rawUrl);
       applyPageUpdate((c) => ({
         ...c,
-        [key]: {
-          ...(c[key] as object),
-          image: data.path,
-          ...(data.pathWebp && { imageWebp: data.pathWebp }),
-          ...(data.pathAvif && { imageAvif: data.pathAvif }),
-        } as NonNullable<ContentData[typeof key]>,
+        [section]: {
+          ...((c[section] as object) || {}),
+          [field]: data.path,
+          ...(data.pathWebp && { [field + "Webp"]: data.pathWebp }),
+          ...(data.pathAvif && { [field + "Avif"]: data.pathAvif }),
+        },
       }));
     } catch {
       setPublishMessage("Erreur réseau lors de l'upload");
@@ -470,10 +470,12 @@ export default function DashboardPage() {
     }
   }
 
-  async function onVideoFileChange(e: React.ChangeEvent<HTMLInputElement>, key: string) {
+  async function onGenericVideoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file || !content) return;
+    const { section, field } = pendingUploadRef.current;
+    const key = section + "-" + field;
 
     let videoFile = file;
     if ((await import("@/lib/compress-video")).needsCompression(file)) {
@@ -525,37 +527,14 @@ export default function DashboardPage() {
     }
 
     previewOverridesRef.current.set(uploadedPath, uploadedRawUrl!);
-    if (key === "hero-video") applyPageUpdate((c) => ({ ...c, hero: { ...c.hero, video: uploadedPath } as NonNullable<ContentData["hero"]> }));
-    else if (key === "about-video") applyPageUpdate((c) => ({ ...c, about: { ...c.about, video: uploadedPath } as NonNullable<ContentData["about"]> }));
-    else if (key === "videoLoop-video") applyPageUpdate((c) => ({ ...c, videoLoop: { ...(c.videoLoop ?? { title: "", video: "" }), video: uploadedPath! } }));
-    else if (key === "videoPlay-video") applyPageUpdate((c) => ({ ...c, videoPlay: { ...(c.videoPlay ?? { title: "", video: "" }), video: uploadedPath! } }));
+    applyPageUpdate((c) => ({
+      ...c,
+      [section]: {
+        ...((c[section] as object) || {}),
+        [field]: uploadedPath,
+      },
+    }));
     setUploadingMedia(null);
-  }
-
-  async function onPosterFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file || !content) return;
-    setUploadingMedia("poster");
-    setUploadProgress(0);
-    try {
-      const form = new FormData();
-      form.append("file", file);
-      form.append("key", "videoPlay-poster");
-      const res = await xhrPost("/api/upload-image", form, undefined, (r) => setUploadProgress(r));
-      if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
-        setPublishMessage(data.error || `Échec upload (${res.status})`);
-        return;
-      }
-      const data = (await res.json()) as { path: string; rawUrl: string };
-      previewOverridesRef.current.set(data.path, data.rawUrl);
-      applyPageUpdate((c) => ({ ...c, videoPlay: { ...(c.videoPlay ?? { title: "", video: "" }), poster: data.path } }));
-    } catch (err) {
-      setPublishMessage(`Upload poster: ${err instanceof Error ? err.message : "réseau"}`);
-    } finally {
-      setUploadingMedia(null);
-    }
   }
 
   /* ── Guards ── */
@@ -626,13 +605,8 @@ export default function DashboardPage() {
       </div>
 
       {/* ═══ Hidden file inputs ═══ */}
-      <input id="cms-upload-hero" type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="sr-only" onChange={(e) => onImageFileChange(e, "hero")} />
-      <input id="cms-upload-about" type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="sr-only" onChange={(e) => onImageFileChange(e, "about")} />
-      <input id="cms-upload-hero-video" type="file" accept="video/mp4,video/webm" className="sr-only" onChange={(e) => onVideoFileChange(e, "hero-video")} />
-      <input id="cms-upload-about-video" type="file" accept="video/mp4,video/webm" className="sr-only" onChange={(e) => onVideoFileChange(e, "about-video")} />
-      <input id="cms-upload-videoloop-video" type="file" accept="video/mp4,video/webm" className="sr-only" onChange={(e) => onVideoFileChange(e, "videoLoop-video")} />
-      <input id="cms-upload-videoplay-video" type="file" accept="video/mp4,video/webm" className="sr-only" onChange={(e) => onVideoFileChange(e, "videoPlay-video")} />
-      <input id="cms-upload-videoplay-poster" type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="sr-only" onChange={onPosterFileChange} />
+      <input id="cms-upload-image" type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="sr-only" onChange={onGenericImageUpload} />
+      <input id="cms-upload-video" type="file" accept="video/mp4,video/webm" className="sr-only" onChange={onGenericVideoUpload} />
 
       {/* ═══ Overlays ═══ */}
       {compressing && (

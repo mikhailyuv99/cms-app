@@ -4,8 +4,9 @@
    All editing logic lives here so bug fixes propagate
    automatically to every client site.
 
-   Click-to-select editing, Notion-style contextual toolbar,
-   corner resize handles, double-click to edit text.
+   GENERIC: discovers editable elements via data-cms-* attributes.
+   No hardcoded section names — works with any site structure.
+
    PostMessage: CMS_READY, CMS_CONTENT, CMS_PATCH, CMS_PAGE,
    CMS_UPLOAD_REQUEST, CMS_SAVE
    ============================================================ */
@@ -40,10 +41,11 @@
     try { window.parent.postMessage(msg, t); } catch (_) { try { window.parent.postMessage(msg, "*"); } catch (__) {} }
   }
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+  function esc(s) { var d = document.createElement("div"); d.textContent = s || ""; return d.innerHTML; }
 
   var content = null;
   var currentSlug = params.get("page") || "index";
-  var ALL = ["hero", "videoLoop", "videoPlay", "about", "services", "contact"];
+  var META_KEYS = { sectionOrder: 1, sectionSizes: 1, theme: 1, pageOrder: 1, pages: 1 };
 
   /* ── nav ── */
   var navEl = document.getElementById("site-nav");
@@ -119,9 +121,9 @@
         if (selectedEl === target) {
           var cfg2 = cmsControls.get(target);
           if (cfg2 && cfg2.isCard) {
-            var textEl = e.target.closest(".service-card__title, .service-card__description");
+            var textEl = e.target.closest("[data-cms-card-field]");
             if (textEl) { textEl.contentEditable = "true"; textEl.focus(); textEl.classList.add("cms-editing"); }
-          } else if (cfg2 && !cfg2.cropContainer && !cfg2.isMediaContainer) {
+          } else if (cfg2 && !cfg2.cropEl && !cfg2.isMediaContainer) {
             target.contentEditable = "true";
             target.focus();
             target.classList.add("cms-editing");
@@ -141,9 +143,9 @@
       if (!target) return;
       var cfg = cmsControls.get(target);
       if (cfg && cfg.isCard) {
-        var textEl = e.target.closest(".service-card__title, .service-card__description");
+        var textEl = e.target.closest("[data-cms-card-field]");
         if (textEl) { textEl.contentEditable = "true"; textEl.focus(); textEl.classList.add("cms-editing"); }
-      } else if (cfg && !cfg.cropContainer) {
+      } else if (cfg && !cfg.cropEl) {
         target.contentEditable = "true";
         target.focus();
         target.classList.add("cms-editing");
@@ -188,38 +190,39 @@
   /* ── Toolbar ── */
   function buildToolbar(el, cfg) {
     toolbar.innerHTML = "";
-    var isMedia = !!cfg.cropContainer;
+    var isCropMedia = !!cfg.cropEl;
 
     if (cfg.canMove) {
-      var label = isMedia ? "Recadrer" : "D\u00e9placer";
-      var icon = isMedia ? ICON_CROP : ICON_MOVE;
+      var label = isCropMedia ? "Recadrer" : "D\u00e9placer";
+      var icon = isCropMedia ? ICON_CROP : ICON_MOVE;
       addTbBtn(icon, label, function (e) {
         e.preventDefault(); deselect();
-        if (isMedia) { var ct = document.getElementById(cfg.cropContainer); if (ct) startCrop(ct, cfg.cropSection, cfg.cropPosField, e.clientX, e.clientY); }
-        else if (cfg.isCard) startCardMove(el, cfg.cardIdx, e.clientX, e.clientY);
+        if (isCropMedia) { startCrop(cfg.cropEl, cfg.section, cfg.cropPosField, e.clientX, e.clientY); }
+        else if (cfg.isCard) startCardMove(el, cfg.cardIdx, cfg.section, cfg.listField, e.clientX, e.clientY);
         else startMove(el, cfg.section, cfg.posField, e.clientX, e.clientY);
       }, true);
     }
 
     if (cfg.uploadKey) {
       addTbBtn(ICON_UPLOAD, "Remplacer", function () {
-        postToParent({ type: "CMS_UPLOAD_REQUEST", source: "cms-site", uploadKey: cfg.uploadKey });
+        postToParent({ type: "CMS_UPLOAD_REQUEST", source: "cms-site", uploadKey: cfg.uploadKey, section: cfg.section, field: cfg.srcField || "image", mediaType: cfg.mediaType || "image" });
       });
     }
 
     if (cfg.hasPoster) {
       addTbBtn(ICON_IMAGE, "Miniature", function () {
-        postToParent({ type: "CMS_UPLOAD_REQUEST", source: "cms-site", uploadKey: "videoPlay-poster" });
+        postToParent({ type: "CMS_UPLOAD_REQUEST", source: "cms-site", uploadKey: cfg.section + "-poster", section: cfg.section, field: cfg.posterField || "poster", mediaType: "image" });
       });
     }
 
     if (cfg.isCard) {
       var d = pageData(currentSlug);
-      var numItems = d && d.services && d.services.items ? d.services.items.length : 0;
+      var secData = d ? d[cfg.section] : null;
+      var numItems = secData && secData[cfg.listField] ? secData[cfg.listField].length : 0;
       if (cfg.cardIdx > 0)
-        addTbBtn(null, "\u2190", function () { swapCards(cfg.cardIdx, cfg.cardIdx - 1); }, false, "cms-tb-txt");
+        addTbBtn(null, "\u2190", function () { swapCards(cfg.section, cfg.listField, cfg.cardIdx, cfg.cardIdx - 1); }, false, "cms-tb-txt");
       if (cfg.cardIdx < numItems - 1)
-        addTbBtn(null, "\u2192", function () { swapCards(cfg.cardIdx, cfg.cardIdx + 1); }, false, "cms-tb-txt");
+        addTbBtn(null, "\u2192", function () { swapCards(cfg.section, cfg.listField, cfg.cardIdx, cfg.cardIdx + 1); }, false, "cms-tb-txt");
     }
   }
 
@@ -242,7 +245,6 @@
     toolbar.appendChild(btn);
   }
 
-  /* FIX: toolbar centered ON media, above text/cards */
   function positionToolbar() {
     if (!selectedEl || !toolbar) return;
     var r = selectedEl.getBoundingClientRect();
@@ -250,7 +252,7 @@
     var tbH = toolbar.offsetHeight || 38;
     var x = r.left + r.width / 2 - tbW / 2;
     var y;
-    if (selectedCfg && selectedCfg.cropContainer) {
+    if (selectedCfg && (selectedCfg.cropEl || selectedCfg.isMediaContainer)) {
       y = r.top + r.height / 2 - tbH / 2;
     } else {
       y = r.top - tbH - 10;
@@ -317,41 +319,24 @@
     document.body.style.touchAction = "none";
   }
 
-  /* ── card swap ── */
-  function swapCards(fromIdx, toIdx) {
+  /* ── card swap (generic) ── */
+  function swapCards(section, listField, fromIdx, toIdx) {
     var d = pageData(currentSlug);
-    if (!d || !d.services || !d.services.items) return;
-    var items = d.services.items.map(function (it) { return Object.assign({}, it); });
+    var secData = d ? d[section] : null;
+    if (!secData || !secData[listField]) return;
+    var items = secData[listField].map(function (it) { return Object.assign({}, it); });
     var temp = items[fromIdx];
     items[fromIdx] = items[toIdx];
     items[toIdx] = temp;
-    d.services.items = items;
+    secData[listField] = items;
     deselect();
-    renderServices(d.services);
-    wireServiceCards();
-    postToParent({ type: "CMS_PATCH", source: "cms-site", pageSlug: currentSlug, patch: { services: { items: items } } });
+    renderSection(section, secData);
+    wireEditors();
+    var patch = {}; patch[section] = {}; patch[section][listField] = items;
+    postToParent({ type: "CMS_PATCH", source: "cms-site", pageSlug: currentSlug, patch: patch });
   }
 
   /* ── size control ── */
-  function changeSize(el, config, delta) {
-    var current = parseFloat(el.dataset.cmsSize) || 1;
-    var next = Math.round(clamp(current + delta, 0.5, 2.5) * 10) / 10;
-    el.dataset.cmsSize = next;
-    if (config.isCard) {
-      applyCardTransform(el);
-      var d = pageData(currentSlug);
-      if (d && d.services && d.services.items) { var items = d.services.items.map(function (it) { return Object.assign({}, it); }); items[config.cardIdx].size = next; d.services.items = items; postToParent({ type: "CMS_PATCH", source: "cms-site", pageSlug: currentSlug, patch: { services: { items: items } } }); }
-    } else {
-      var base = parseFloat(el.dataset.cmsBaseSize);
-      if (!base) { el.style.fontSize = ""; base = parseFloat(window.getComputedStyle(el).fontSize); el.dataset.cmsBaseSize = base; }
-      el.style.fontSize = (base * next) + "px";
-      var p = {}; p[config.section] = {}; p[config.section][config.sizeField] = next;
-      postToParent({ type: "CMS_PATCH", source: "cms-site", pageSlug: currentSlug, patch: p });
-    }
-    positionToolbar();
-    positionHandles();
-  }
-
   function applySize(el, size) {
     if (!el) return;
     el.dataset.cmsSize = size || 1;
@@ -508,15 +493,28 @@
     });
   }
 
-  /* ── clear & render ── */
+  /* ============================================================
+     GENERIC CLEAR & RENDER
+     ============================================================ */
   function clearAll() {
     if (isCms) deselect();
-    ["hero-title", "hero-subtitle", "hero-media", "video-loop-title", "video-loop-media", "video-play-title", "about-title", "about-text", "about-media", "services-title", "services-list", "contact-title", "contact-text", "contact-email", "contact-cta"].forEach(function (id) {
-      var el = document.getElementById(id); if (!el) return; if (id === "services-list") { el.innerHTML = ""; return; } el.textContent = "";
+    document.querySelectorAll("[data-cms-field]").forEach(function (el) {
+      el.textContent = "";
+      el.removeAttribute("data-cms-wired");
     });
-    var vpm = document.getElementById("video-play-media");
-    if (vpm) { var glow = vpm.querySelector(".video-play__glow"); vpm.innerHTML = ""; if (glow) vpm.appendChild(glow); }
-    ALL.forEach(function (s) { var sec = document.querySelector('[data-section="' + s + '"]'); if (sec) { sec.style.display = "none"; sec.style.minHeight = ""; sec.style.height = ""; sec.style.overflow = ""; } });
+    document.querySelectorAll("[data-cms-media]").forEach(function (container) {
+      var rt = container.querySelector("[data-cms-render]");
+      if (rt) { rt.innerHTML = ""; } else { container.innerHTML = ""; }
+    });
+    document.querySelectorAll("[data-cms-list]").forEach(function (el) {
+      el.innerHTML = "";
+    });
+    document.querySelectorAll("[data-section]").forEach(function (sec) {
+      sec.style.display = "none";
+      sec.style.minHeight = "";
+      sec.style.height = "";
+      sec.style.overflow = "";
+    });
     cmsControls.clear();
     document.querySelectorAll("[data-cms-ctrl]").forEach(function (el) { el.removeAttribute("data-cms-ctrl"); el.removeAttribute("contenteditable"); });
     document.querySelectorAll(".cms-sec-bar, .cms-sec-resize").forEach(function (b) { b.remove(); });
@@ -524,12 +522,15 @@
 
   function renderPage(d) {
     clearAll(); if (!d) return;
-    if (d.hero) renderHero(d.hero);
-    if (d.videoLoop) renderVideoLoop(d.videoLoop);
-    if (d.videoPlay) renderVideoPlay(d.videoPlay);
-    if (d.about) renderAbout(d.about);
-    if (d.services) renderServices(d.services);
-    if (d.contact) renderContact(d.contact);
+    var keys = Object.keys(d);
+    for (var i = 0; i < keys.length; i++) {
+      var key = keys[i];
+      if (META_KEYS[key]) continue;
+      var val = d[key];
+      if (!val || typeof val !== "object" || Array.isArray(val)) continue;
+      var sec = document.querySelector('[data-section="' + key + '"]');
+      if (sec) renderSection(key, val);
+    }
     if (d.sectionOrder) applySectionOrder(d.sectionOrder);
     if (d.sectionSizes) applySectionSizes(d.sectionSizes);
     if (isCms) wireEditors();
@@ -537,10 +538,195 @@
     requestAnimationFrame(observeAnims);
   }
 
-  function show(s) { var el = document.querySelector('[data-section="' + s + '"]'); if (el) el.style.display = ""; }
-  function setTxt(id, val) { var el = document.getElementById(id); if (el) el.textContent = val || ""; }
-  function esc(s) { var d = document.createElement("div"); d.textContent = s || ""; return d.innerHTML; }
+  /* ── Generic section renderer ── */
+  function renderSection(sectionName, data) {
+    var sec = document.querySelector('[data-section="' + sectionName + '"]');
+    if (!sec) return;
+    sec.style.display = "";
 
+    /* — text fields — */
+    sec.querySelectorAll("[data-cms-field]").forEach(function (el) {
+      var field = el.getAttribute("data-cms-field");
+      if (data[field] != null) el.textContent = data[field];
+
+      var hrefField = el.getAttribute("data-cms-href");
+      if (hrefField && data[hrefField] && el.tagName === "A") {
+        el.href = "mailto:" + data[hrefField];
+      }
+
+      applyPos(el, data[field + "Position"]);
+      applySize(el, data[field + "Size"]);
+      registerControl(el, {
+        canMove: true, canResize: true,
+        section: sectionName,
+        posField: field + "Position",
+        sizeField: field + "Size"
+      });
+    });
+
+    /* — media containers — */
+    sec.querySelectorAll("[data-cms-media]").forEach(function (container) {
+      var mediaType = container.getAttribute("data-cms-media");
+      var srcField = container.getAttribute("data-cms-src") || (mediaType === "image" ? "image" : "video");
+      var posField = srcField === "image" ? "imagePosition" : "videoPosition";
+      var posterField = container.getAttribute("data-cms-poster") || null;
+
+      var renderTarget = container.querySelector("[data-cms-render]") || container;
+      renderTarget.innerHTML = "";
+
+      var src = data[srcField];
+      if (src) {
+        var mediaEl;
+        if (mediaType === "image") {
+          mediaEl = document.createElement("img");
+          mediaEl.src = resolveUrl(src);
+          mediaEl.alt = "";
+          mediaEl.loading = "eager";
+        } else if (mediaType === "video") {
+          mediaEl = document.createElement("video");
+          mediaEl.src = resolveUrl(src);
+          mediaEl.controls = true;
+          mediaEl.playsInline = true;
+          mediaEl.preload = "auto";
+          mediaEl.setAttribute("playsinline", "");
+          if (posterField && data[posterField]) mediaEl.poster = resolveUrl(data[posterField]);
+        } else if (mediaType === "videoLoop") {
+          mediaEl = document.createElement("video");
+          mediaEl.src = resolveUrl(src);
+          mediaEl.autoplay = true;
+          mediaEl.muted = true;
+          mediaEl.loop = true;
+          mediaEl.playsInline = true;
+          mediaEl.preload = "auto";
+          mediaEl.setAttribute("playsinline", "");
+        }
+
+        if (mediaEl) {
+          applyCrop(mediaEl, data[posField]);
+          renderTarget.appendChild(mediaEl);
+          if (mediaType === "videoLoop") mediaEl.play().catch(function () {});
+        }
+      }
+
+      applyMediaSize(container, data.mediaSize);
+
+      var isCropType = mediaType === "image" || mediaType === "videoLoop";
+      var uploadKey = sectionName + "-" + srcField;
+      var config = {
+        canMove: true, canResize: true, isMediaContainer: true,
+        uploadKey: uploadKey,
+        section: sectionName,
+        sizeField: "mediaSize",
+        srcField: srcField,
+        mediaType: mediaType === "image" ? "image" : "video"
+      };
+
+      if (isCropType) {
+        config.cropEl = renderTarget;
+        config.cropSection = sectionName;
+        config.cropPosField = posField;
+      } else {
+        config.posField = "mediaPosition";
+        applyPos(container, data.mediaPosition);
+      }
+
+      if (posterField) {
+        config.hasPoster = true;
+        config.posterField = posterField;
+      }
+
+      registerControl(container, config);
+    });
+
+    /* — card lists — */
+    sec.querySelectorAll("[data-cms-list]").forEach(function (list) {
+      var listField = list.getAttribute("data-cms-list");
+      var items = data[listField];
+      if (!items || !Array.isArray(items)) return;
+
+      var tmpl = sec.querySelector('template[data-cms-card="' + listField + '"]');
+      if (!tmpl) return;
+
+      list.innerHTML = "";
+      items.forEach(function (item, idx) {
+        var clone = tmpl.content.cloneNode(true);
+        var card = clone.firstElementChild;
+        if (!card) return;
+
+        card.dataset.idx = idx;
+        card.setAttribute("data-cms-card-item", "");
+
+        card.querySelectorAll("[data-cms-card-field]").forEach(function (el) {
+          var f = el.getAttribute("data-cms-card-field");
+          if (item[f] != null) el.textContent = item[f];
+        });
+
+        card.dataset.cmsPosX = item.position ? (item.position.x || 0) : 0;
+        card.dataset.cmsPosY = item.position ? (item.position.y || 0) : 0;
+        card.dataset.cmsSize = item.size || 1;
+
+        list.appendChild(card);
+        applyCardTransform(card);
+        registerControl(card, { canMove: true, canResize: true, isCard: true, cardIdx: idx, section: sectionName, listField: listField });
+      });
+    });
+  }
+
+  /* ============================================================
+     GENERIC TEXT EDITING — wired after render
+     ============================================================ */
+  function wireEditors() {
+    document.querySelectorAll("[data-section]").forEach(function (sec) {
+      if (sec.style.display === "none") return;
+      var sectionName = sec.getAttribute("data-section");
+
+      sec.querySelectorAll("[data-cms-field]").forEach(function (el) {
+        if (el.dataset.cmsWired) return;
+        el.dataset.cmsWired = "true";
+        el.spellcheck = false;
+        el.style.outline = "none";
+        var field = el.getAttribute("data-cms-field");
+        var timer;
+        if (el.tagName === "A") el.addEventListener("click", function (e) { e.preventDefault(); });
+        function emit() {
+          var p = {}; p[sectionName] = {}; p[sectionName][field] = el.textContent;
+          postToParent({ type: "CMS_PATCH", source: "cms-site", pageSlug: currentSlug, patch: p });
+        }
+        el.addEventListener("input", function () { clearTimeout(timer); timer = setTimeout(emit, 350); });
+        el.addEventListener("blur", function () { clearTimeout(timer); emit(); el.contentEditable = "false"; el.classList.remove("cms-editing"); });
+      });
+
+      sec.querySelectorAll("[data-cms-list]").forEach(function (list) {
+        var listField = list.getAttribute("data-cms-list");
+        var cards = list.children;
+        for (var i = 0; i < cards.length; i++) {
+          (function (card, idx) {
+            card.querySelectorAll("[data-cms-card-field]").forEach(function (el) {
+              if (el.dataset.cmsWired) return;
+              el.dataset.cmsWired = "true";
+              el.spellcheck = false;
+              el.style.outline = "none";
+              var cardField = el.getAttribute("data-cms-card-field");
+              var timer;
+              function emit() {
+                var d = pageData(currentSlug);
+                var secData = d ? d[sectionName] : null;
+                if (!secData || !secData[listField] || !secData[listField][idx]) return;
+                var items = secData[listField].map(function (it) { return Object.assign({}, it); });
+                items[idx][cardField] = el.textContent;
+                var patch = {}; patch[sectionName] = {}; patch[sectionName][listField] = items;
+                postToParent({ type: "CMS_PATCH", source: "cms-site", pageSlug: currentSlug, patch: patch });
+              }
+              el.addEventListener("input", function () { clearTimeout(timer); timer = setTimeout(emit, 350); });
+              el.addEventListener("blur", function () { clearTimeout(timer); emit(); el.contentEditable = "false"; el.classList.remove("cms-editing"); });
+            });
+          })(cards[i], i);
+        }
+      });
+    });
+  }
+
+  /* ── positions & crop ── */
   function applyPos(el, pos) {
     if (!el || !pos) return;
     if (typeof el === "string") el = document.querySelector(el);
@@ -558,7 +744,6 @@
     el.style.transform = t;
   }
 
-  /* FIX: controlled videos use object-position, not the oversized approach */
   function isControlledVideo(el) {
     return el && el.tagName === "VIDEO" && el.controls;
   }
@@ -597,160 +782,12 @@
     }
   }
 
-  /* ── hero ── */
-  function renderHero(d) {
-    show("hero");
-    setTxt("hero-title", d.title); setTxt("hero-subtitle", d.subtitle);
-    var badge = document.querySelector(".hero__badge"); if (badge) badge.textContent = d.badge || "Production Audiovisuelle";
-    var c = document.getElementById("hero-media");
-    if (c) { c.innerHTML = ""; if (d.image) { var img = document.createElement("img"); img.className = "hero__image"; img.src = resolveUrl(d.image); img.alt = ""; img.loading = "eager"; applyCrop(img, d.imagePosition); c.appendChild(img); } }
-    applyPos("#hero-title", d.titlePosition); applyPos("#hero-subtitle", d.subtitlePosition); applyPos(".hero__badge", d.badgePosition); applyPos(".hero__content", d.contentPosition);
-    applySize(document.getElementById("hero-title"), d.titleSize);
-    applySize(document.getElementById("hero-subtitle"), d.subtitleSize);
-    applySize(document.querySelector(".hero__badge"), d.badgeSize);
-    applyMediaSize(document.getElementById("hero-media-zone"), d.mediaSize);
-    registerControl(document.getElementById("hero-media-zone"), { canMove: true, canResize: true, isMediaContainer: true, uploadKey: "hero", cropContainer: "hero-media", cropSection: "hero", cropPosField: "imagePosition", section: "hero", sizeField: "mediaSize" });
-    registerControl(document.getElementById("hero-title"), { canMove: true, canResize: true, section: "hero", posField: "titlePosition", sizeField: "titleSize" });
-    registerControl(document.getElementById("hero-subtitle"), { canMove: true, canResize: true, section: "hero", posField: "subtitlePosition", sizeField: "subtitleSize" });
-    registerControl(document.querySelector(".hero__badge"), { canMove: true, canResize: true, section: "hero", posField: "badgePosition", sizeField: "badgeSize" });
-  }
-
-  function renderVideoLoop(d) {
-    show("videoLoop"); setTxt("video-loop-title", d.title);
-    var c = document.getElementById("video-loop-media");
-    if (c) { c.innerHTML = ""; if (d.video) { var v = document.createElement("video"); v.src = resolveUrl(d.video); v.autoplay = true; v.muted = true; v.loop = true; v.playsInline = true; v.preload = "auto"; v.setAttribute("playsinline", ""); applyCrop(v, d.videoPosition); c.appendChild(v); v.play().catch(function () {}); } }
-    applyPos("#video-loop-title", d.titlePosition);
-    applySize(document.getElementById("video-loop-title"), d.titleSize);
-    registerControl(document.getElementById("videoLoop"), { canMove: true, canResize: true, isMediaContainer: true, uploadKey: "videoLoop-video", cropContainer: "video-loop-media", cropSection: "videoLoop", cropPosField: "videoPosition", section: "videoLoop", sizeField: "mediaSize" });
-    registerControl(document.getElementById("video-loop-title"), { canMove: true, canResize: true, section: "videoLoop", posField: "titlePosition", sizeField: "titleSize" });
-  }
-
-  function renderVideoPlay(d) {
-    show("videoPlay"); setTxt("video-play-title", d.title);
-    var lbl = document.querySelector(".video-play__label"); if (lbl) lbl.textContent = d.label || "Showreel";
-    var c = document.getElementById("video-play-media");
-    if (c) { var glow = c.querySelector(".video-play__glow"); c.innerHTML = ""; if (glow) c.appendChild(glow); if (d.video) { var v = document.createElement("video"); v.src = resolveUrl(d.video); v.controls = true; v.playsInline = true; v.preload = "auto"; v.setAttribute("playsinline", ""); if (d.poster) v.poster = resolveUrl(d.poster); applyCrop(v, d.videoPosition); c.appendChild(v); } }
-    applyMediaSize(document.getElementById("video-play-media"), d.mediaSize);
-    applyPos("#video-play-media", d.mediaPosition);
-    applyPos("#video-play-title", d.titlePosition); applyPos(".video-play__label", d.labelPosition);
-    applySize(document.getElementById("video-play-title"), d.titleSize);
-    applySize(document.querySelector(".video-play__label"), d.labelSize);
-    registerControl(document.getElementById("video-play-media"), { canMove: true, canResize: true, isMediaContainer: true, uploadKey: "videoPlay-video", hasPoster: true, section: "videoPlay", posField: "mediaPosition", sizeField: "mediaSize" });
-    registerControl(document.getElementById("video-play-title"), { canMove: true, canResize: true, section: "videoPlay", posField: "titlePosition", sizeField: "titleSize" });
-    registerControl(document.querySelector(".video-play__label"), { canMove: true, canResize: true, section: "videoPlay", posField: "labelPosition", sizeField: "labelSize" });
-  }
-
-  function renderAbout(d) {
-    show("about"); setTxt("about-title", d.title); setTxt("about-text", d.text);
-    var ey = document.querySelector(".about__eyebrow"); if (ey) ey.textContent = d.eyebrow || "\u00C0 propos";
-    var c = document.getElementById("about-media");
-    if (c) { c.innerHTML = ""; if (d.image) { var img = document.createElement("img"); img.className = "about__image"; img.src = resolveUrl(d.image); img.alt = ""; applyCrop(img, d.imagePosition); c.appendChild(img); } }
-    applyPos("#about-title", d.titlePosition); applyPos("#about-text", d.textPosition); applyPos(".about__eyebrow", d.eyebrowPosition);
-    applySize(document.getElementById("about-title"), d.titleSize);
-    applySize(document.getElementById("about-text"), d.textSize);
-    applySize(document.querySelector(".about__eyebrow"), d.eyebrowSize);
-    registerControl(document.getElementById("about-media-zone"), { canMove: true, canResize: true, isMediaContainer: true, uploadKey: "about", cropContainer: "about-media", cropSection: "about", cropPosField: "imagePosition", section: "about", sizeField: "mediaSize" });
-    registerControl(document.getElementById("about-title"), { canMove: true, canResize: true, section: "about", posField: "titlePosition", sizeField: "titleSize" });
-    registerControl(document.getElementById("about-text"), { canMove: true, canResize: true, section: "about", posField: "textPosition", sizeField: "textSize" });
-    registerControl(document.querySelector(".about__eyebrow"), { canMove: true, canResize: true, section: "about", posField: "eyebrowPosition", sizeField: "eyebrowSize" });
-  }
-
-  function renderServices(d) {
-    show("services"); setTxt("services-title", d.title);
-    var ey = document.querySelector(".services__eyebrow"); if (ey) ey.textContent = d.eyebrow || "Expertise";
-    var list = document.getElementById("services-list"); if (!list || !d.items) return;
-    list.innerHTML = "";
-    d.items.forEach(function (item, idx) {
-      var card = document.createElement("div"); card.className = "service-card"; card.dataset.idx = idx;
-      card.innerHTML = '<h3 class="service-card__title">' + esc(item.title) + '</h3><p class="service-card__description">' + esc(item.description) + '</p>';
-      card.dataset.cmsPosX = item.position ? (item.position.x || 0) : 0;
-      card.dataset.cmsPosY = item.position ? (item.position.y || 0) : 0;
-      card.dataset.cmsSize = item.size || 1;
-      list.appendChild(card);
-      applyCardTransform(card);
-      registerControl(card, { canMove: true, canResize: true, isCard: true, cardIdx: idx });
-    });
-    applyPos("#services-title", d.titlePosition); applyPos(".services__eyebrow", d.eyebrowPosition);
-    applySize(document.getElementById("services-title"), d.titleSize);
-    applySize(document.querySelector(".services__eyebrow"), d.eyebrowSize);
-    registerControl(document.getElementById("services-title"), { canMove: true, canResize: true, section: "services", posField: "titlePosition", sizeField: "titleSize" });
-    registerControl(document.querySelector(".services__eyebrow"), { canMove: true, canResize: true, section: "services", posField: "eyebrowPosition", sizeField: "eyebrowSize" });
-  }
-
-  function renderContact(d) {
-    show("contact"); setTxt("contact-title", d.title); setTxt("contact-text", d.text);
-    var emailEl = document.getElementById("contact-email"); if (emailEl) emailEl.textContent = d.email || "";
-    var cta = document.getElementById("contact-cta"); if (cta) { cta.textContent = d.cta || d.buttonLabel || ""; cta.href = d.email ? "mailto:" + d.email : "#"; }
-    applyPos("#contact-title", d.titlePosition); applyPos("#contact-text", d.textPosition); applyPos("#contact-cta", d.ctaPosition);
-    applySize(document.getElementById("contact-title"), d.titleSize);
-    applySize(document.getElementById("contact-text"), d.textSize);
-    applySize(document.getElementById("contact-cta"), d.ctaSize);
-    registerControl(document.getElementById("contact-title"), { canMove: true, canResize: true, section: "contact", posField: "titlePosition", sizeField: "titleSize" });
-    registerControl(document.getElementById("contact-text"), { canMove: true, canResize: true, section: "contact", posField: "textPosition", sizeField: "textSize" });
-    registerControl(document.getElementById("contact-email"), { canMove: true, canResize: true, section: "contact", posField: "emailPosition", sizeField: "emailSize" });
-    registerControl(document.getElementById("contact-cta"), { canMove: true, canResize: true, section: "contact", posField: "ctaPosition", sizeField: "ctaSize" });
-  }
-
-  /* ============================================================
-     TEXT EDITING — wired on render, contentEditable toggled on dblclick
-     ============================================================ */
-  function wireText(id, section, field) {
-    var el = document.getElementById(id); if (!el || el.dataset.cmsWired) return;
-    el.dataset.cmsWired = "true"; el.spellcheck = false; el.style.outline = "none";
-    var timer;
-    function emit() { var p = {}; p[section] = {}; p[section][field] = el.textContent; postToParent({ type: "CMS_PATCH", source: "cms-site", pageSlug: currentSlug, patch: p }); }
-    el.addEventListener("input", function () { clearTimeout(timer); timer = setTimeout(emit, 350); });
-    el.addEventListener("blur", function () { clearTimeout(timer); emit(); el.contentEditable = "false"; el.classList.remove("cms-editing"); });
-  }
-  function wireEl(sel, section, field) {
-    var el = document.querySelector(sel); if (!el || el.dataset.cmsWired) return;
-    el.dataset.cmsWired = "true"; el.spellcheck = false; el.style.outline = "none";
-    var timer;
-    function emit() { var p = {}; p[section] = {}; p[section][field] = el.textContent; postToParent({ type: "CMS_PATCH", source: "cms-site", pageSlug: currentSlug, patch: p }); }
-    el.addEventListener("input", function () { clearTimeout(timer); timer = setTimeout(emit, 350); });
-    el.addEventListener("blur", function () { clearTimeout(timer); emit(); el.contentEditable = "false"; el.classList.remove("cms-editing"); });
-  }
-  function wireServiceCards() {
-    var list = document.getElementById("services-list"); if (!list) return;
-    list.querySelectorAll(".service-card").forEach(function (card, idx) {
-      [{ sel: ".service-card__title", f: "title" }, { sel: ".service-card__description", f: "description" }].forEach(function (cfg) {
-        var el = card.querySelector(cfg.sel); if (!el || el.dataset.cmsWired) return;
-        el.dataset.cmsWired = "true"; el.spellcheck = false; el.style.outline = "none";
-        var timer, field = cfg.f;
-        function emit() { var d = pageData(currentSlug); if (!d || !d.services || !d.services.items || !d.services.items[idx]) return; var items = d.services.items.map(function (it) { return Object.assign({}, it); }); items[idx][field] = el.textContent; postToParent({ type: "CMS_PATCH", source: "cms-site", pageSlug: currentSlug, patch: { services: { items: items } } }); }
-        el.addEventListener("input", function () { clearTimeout(timer); timer = setTimeout(emit, 350); });
-        el.addEventListener("blur", function () { clearTimeout(timer); emit(); el.contentEditable = "false"; el.classList.remove("cms-editing"); });
-      });
-    });
-  }
-  function wireCta() {
-    var cta = document.getElementById("contact-cta"); if (!cta || cta.dataset.cmsWired) return;
-    cta.dataset.cmsWired = "true"; cta.spellcheck = false; cta.style.outline = "none";
-    cta.addEventListener("click", function (e) { e.preventDefault(); });
-    var timer;
-    function emit() { postToParent({ type: "CMS_PATCH", source: "cms-site", pageSlug: currentSlug, patch: { contact: { cta: cta.textContent } } }); }
-    cta.addEventListener("input", function () { clearTimeout(timer); timer = setTimeout(emit, 350); });
-    cta.addEventListener("blur", function () { clearTimeout(timer); emit(); cta.contentEditable = "false"; cta.classList.remove("cms-editing"); });
-  }
-  function wireEditors() {
-    wireText("hero-title", "hero", "title"); wireText("hero-subtitle", "hero", "subtitle");
-    wireText("video-loop-title", "videoLoop", "title"); wireText("video-play-title", "videoPlay", "title");
-    wireText("about-title", "about", "title"); wireText("about-text", "about", "text");
-    wireText("services-title", "services", "title");
-    wireText("contact-title", "contact", "title"); wireText("contact-text", "contact", "text"); wireText("contact-email", "contact", "email");
-    wireCta();
-    wireEl(".hero__badge", "hero", "badge"); wireEl(".video-play__label", "videoPlay", "label");
-    wireEl(".about__eyebrow", "about", "eyebrow"); wireEl(".services__eyebrow", "services", "eyebrow");
-    wireServiceCards();
-  }
-
   /* ============================================================
      UNIFIED DRAG SYSTEM — single set of listeners
      dragState.type: "crop" | "move" | "card"
      ============================================================ */
   var dragState = null;
 
-  /* FIX: controlled videos use object-position, not oversized translate */
   function startCrop(container, section, posField, cx, cy) {
     var media = container.querySelector("img, video"); if (!media) return;
 
@@ -781,9 +818,9 @@
     showSnapGrid(parent || el.parentElement);
   }
 
-  function startCardMove(card, idx, cx, cy) {
+  function startCardMove(card, idx, section, listField, cx, cy) {
     var parent = card.closest("[data-section]") || card.parentElement;
-    dragState = { type: "card", card: card, idx: idx, sx: cx, sy: cy, ox: parseFloat(card.dataset.cmsPosX) || 0, oy: parseFloat(card.dataset.cmsPosY) || 0, elRect: card.getBoundingClientRect(), parentRect: parent ? parent.getBoundingClientRect() : null };
+    dragState = { type: "card", card: card, idx: idx, section: section, listField: listField, sx: cx, sy: cy, ox: parseFloat(card.dataset.cmsPosX) || 0, oy: parseFloat(card.dataset.cmsPosY) || 0, elRect: card.getBoundingClientRect(), parentRect: parent ? parent.getBoundingClientRect() : null };
     card.classList.add("cms-moving"); document.body.style.userSelect = "none"; document.body.style.cursor = "grabbing"; document.body.style.touchAction = "none";
     showSnapGrid(parent || card.parentElement);
   }
@@ -849,7 +886,14 @@
       var cfg = resizeState.cfg;
       if (cfg.isCard) {
         var d = pageData(currentSlug);
-        if (d && d.services && d.services.items) { var items = d.services.items.map(function (it) { return Object.assign({}, it); }); items[cfg.cardIdx].size = sz; d.services.items = items; postToParent({ type: "CMS_PATCH", source: "cms-site", pageSlug: currentSlug, patch: { services: { items: items } } }); }
+        var secData = d ? d[cfg.section] : null;
+        if (secData && secData[cfg.listField]) {
+          var items = secData[cfg.listField].map(function (it) { return Object.assign({}, it); });
+          items[cfg.cardIdx].size = sz;
+          secData[cfg.listField] = items;
+          var patch = {}; patch[cfg.section] = {}; patch[cfg.section][cfg.listField] = items;
+          postToParent({ type: "CMS_PATCH", source: "cms-site", pageSlug: currentSlug, patch: patch });
+        }
       } else if (cfg.section && cfg.sizeField) {
         var p = {}; p[cfg.section] = {}; p[cfg.section][cfg.sizeField] = sz;
         postToParent({ type: "CMS_PATCH", source: "cms-site", pageSlug: currentSlug, patch: p });
@@ -880,11 +924,13 @@
       dragState.card.classList.remove("cms-moving");
       var fcx = Math.round(parseFloat(dragState.card.dataset.cmsPosX) || 0), fcy = Math.round(parseFloat(dragState.card.dataset.cmsPosY) || 0);
       var dc = pageData(currentSlug);
-      if (dc && dc.services && dc.services.items && dc.services.items[dragState.idx]) {
-        var items2 = dc.services.items.map(function (it) { return Object.assign({}, it); });
+      var secData2 = dc ? dc[dragState.section] : null;
+      if (secData2 && secData2[dragState.listField] && secData2[dragState.listField][dragState.idx]) {
+        var items2 = secData2[dragState.listField].map(function (it) { return Object.assign({}, it); });
         items2[dragState.idx].position = { x: fcx, y: fcy };
-        dc.services.items = items2;
-        postToParent({ type: "CMS_PATCH", source: "cms-site", pageSlug: currentSlug, patch: { services: { items: items2 } } });
+        secData2[dragState.listField] = items2;
+        var patch2 = {}; patch2[dragState.section] = {}; patch2[dragState.section][dragState.listField] = items2;
+        postToParent({ type: "CMS_PATCH", source: "cms-site", pageSlug: currentSlug, patch: patch2 });
       }
     }
     dragState = null;
@@ -935,7 +981,6 @@
     initCmsUI();
     var css = document.createElement("style");
     css.textContent = [
-      /* FIX: force position:relative on all sections so section bars work */
       '[data-section] { position: relative; }',
 
       '.cms-positioned[data-anim] { opacity: 1 !important; }',
@@ -1030,10 +1075,8 @@
       '}',
       '.cms-sec-resize:hover::after { background: rgba(196,165,90,.8); }',
 
-      '.service-card { position: relative; }',
-      '.service-card:hover { transform: var(--cms-translate, none) !important; }',
-      '.contact__cta { cursor: pointer; position: relative; display: inline-block; }',
-      '.contact__cta:hover { transform: var(--cms-translate, none) !important; }',
+      '[data-cms-card-item] { position: relative; }',
+      '[data-cms-card-item]:hover { transform: var(--cms-translate, none) !important; }',
       '[data-anim].is-visible.cms-positioned { transform: var(--cms-translate) !important; }',
 
       '@media (max-width: 680px) {',
