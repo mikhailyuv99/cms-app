@@ -447,8 +447,11 @@
   function onSectionResizeMove(cy) {
     if (!sectionResizeState) return;
     var delta = cy - sectionResizeState.sy;
-    var newH = Math.max(50, sectionResizeState.startH + delta);
-    sectionResizeState.sec.style.minHeight = newH + "px";
+    var newH = Math.max(30, sectionResizeState.startH + delta);
+    var sec = sectionResizeState.sec;
+    sec.style.height = newH + "px";
+    sec.style.minHeight = "0";
+    sec.style.overflow = "hidden";
   }
   function onSectionResizeEnd() {
     if (!sectionResizeState) return;
@@ -498,7 +501,9 @@
     Object.keys(sizes).forEach(function (name) {
       var sec = document.querySelector('[data-section="' + name + '"]');
       if (sec && sizes[name]) {
-        sec.style.minHeight = sizes[name] + "px";
+        sec.style.height = sizes[name] + "px";
+        sec.style.minHeight = "0";
+        sec.style.overflow = "hidden";
       }
     });
   }
@@ -511,7 +516,7 @@
     });
     var vpm = document.getElementById("video-play-media");
     if (vpm) { var glow = vpm.querySelector(".video-play__glow"); vpm.innerHTML = ""; if (glow) vpm.appendChild(glow); }
-    ALL.forEach(function (s) { var sec = document.querySelector('[data-section="' + s + '"]'); if (sec) { sec.style.display = "none"; sec.style.minHeight = ""; } });
+    ALL.forEach(function (s) { var sec = document.querySelector('[data-section="' + s + '"]'); if (sec) { sec.style.display = "none"; sec.style.minHeight = ""; sec.style.height = ""; sec.style.overflow = ""; } });
     cmsControls.clear();
     document.querySelectorAll("[data-cms-ctrl]").forEach(function (el) { el.removeAttribute("data-cms-ctrl"); el.removeAttribute("contenteditable"); });
     document.querySelectorAll(".cms-sec-bar, .cms-sec-resize").forEach(function (b) { b.remove(); });
@@ -1015,7 +1020,7 @@
       '.cms-sec-btn:hover { background: rgba(255,255,255,.15); color: #fff; }',
 
       '.cms-sec-resize {',
-      '  position: absolute; bottom: -3px; left: 0; width: 100%; height: 8px;',
+      '  position: absolute; bottom: 0; left: 0; width: 100%; height: 8px;',
       '  z-index: 500; cursor: ns-resize; opacity: 0; transition: opacity .15s;',
       '  background: transparent; pointer-events: none;',
       '}',
