@@ -590,7 +590,7 @@ export default function DashboardPage() {
     <div className="h-dvh flex flex-col bg-black overflow-hidden relative">
 
       {/* ═══ Floating CMS bar ═══ */}
-      <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-1.5 px-2 py-1.5 rounded-xl bg-[rgba(15,15,18,.92)] border border-[rgba(255,255,255,.1)] backdrop-blur-2xl shadow-[0_8px_32px_rgba(0,0,0,.5)]">
+      <div className="fixed top-3 max-sm:top-auto max-sm:bottom-3 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-1.5 px-2 py-1.5 rounded-xl bg-[rgba(15,15,18,.92)] border border-[rgba(255,255,255,.1)] backdrop-blur-2xl shadow-[0_8px_32px_rgba(0,0,0,.5)]">
         <div className="flex items-center rounded-lg border border-[rgba(255,255,255,.08)] bg-[rgba(255,255,255,.04)] p-0.5">
           <button type="button" onClick={handleUndo} disabled={historyIndex <= 0} className="rounded p-1.5 text-[rgba(255,255,255,.5)] hover:text-white disabled:opacity-25 disabled:pointer-events-none transition-colors" title="Annuler (Ctrl+Z)">
             <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
