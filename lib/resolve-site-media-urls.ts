@@ -37,34 +37,27 @@ export function resolveSiteMediaUrl(siteUrl: string, raw: string | undefined): s
   }
 }
 
+const MEDIA_FIELD_RE = /image|video|poster|media|src|url|webp|avif|jpg|png|mp4|webm/i;
+const META_PAGE_KEYS = new Set(["theme", "sectionOrder", "sectionSizes", "pageOrder", "pages"]);
+
 function absolutizePageData(page: ContentData, siteUrl: string): ContentData {
-  const out = { ...page } as ContentData;
-  if (out.hero) {
-    const h = { ...out.hero };
-    if (h.image) h.image = resolveSiteMediaUrl(siteUrl, h.image) ?? h.image;
-    if (h.imageWebp) h.imageWebp = resolveSiteMediaUrl(siteUrl, h.imageWebp) ?? h.imageWebp;
-    if (h.imageAvif) h.imageAvif = resolveSiteMediaUrl(siteUrl, h.imageAvif) ?? h.imageAvif;
-    if (h.video) h.video = resolveSiteMediaUrl(siteUrl, h.video) ?? h.video;
-    out.hero = h;
+  const out: Record<string, unknown> = { ...page };
+  for (const sectionKey of Object.keys(out)) {
+    if (META_PAGE_KEYS.has(sectionKey)) continue;
+    const val = out[sectionKey];
+    if (val && typeof val === "object" && !Array.isArray(val)) {
+      out[sectionKey] = absolutizeSectionData(val as Record<string, unknown>, siteUrl);
+    }
   }
-  if (out.about) {
-    const a = { ...out.about };
-    if (a.image) a.image = resolveSiteMediaUrl(siteUrl, a.image) ?? a.image;
-    if (a.imageWebp) a.imageWebp = resolveSiteMediaUrl(siteUrl, a.imageWebp) ?? a.imageWebp;
-    if (a.imageAvif) a.imageAvif = resolveSiteMediaUrl(siteUrl, a.imageAvif) ?? a.imageAvif;
-    if (a.video) a.video = resolveSiteMediaUrl(siteUrl, a.video) ?? a.video;
-    out.about = a;
-  }
-  if (out.videoLoop) {
-    const v = { ...out.videoLoop };
-    if (v.video) v.video = resolveSiteMediaUrl(siteUrl, v.video) ?? v.video;
-    out.videoLoop = v;
-  }
-  if (out.videoPlay) {
-    const v = { ...out.videoPlay };
-    if (v.video) v.video = resolveSiteMediaUrl(siteUrl, v.video) ?? v.video;
-    if (v.poster) v.poster = resolveSiteMediaUrl(siteUrl, v.poster) ?? v.poster;
-    out.videoPlay = v;
+  return out as ContentData;
+}
+
+function absolutizeSectionData(section: Record<string, unknown>, siteUrl: string): Record<string, unknown> {
+  const out = { ...section };
+  for (const key of Object.keys(out)) {
+    if (typeof out[key] === "string" && MEDIA_FIELD_RE.test(key)) {
+      out[key] = resolveSiteMediaUrl(siteUrl, out[key] as string) ?? out[key];
+    }
   }
   return out;
 }

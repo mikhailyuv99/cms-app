@@ -30,67 +30,18 @@ export const DEFAULT_THEME: Required<ThemeColors> = {
   contactButtonText: "#0d0d0d",
 };
 
-export type SectionId = "hero" | "about" | "services" | "contact" | "videoLoop" | "videoPlay";
+export type SectionId = string;
 
 export interface Position { x: number; y: number; }
 
 export interface ContentData {
-  hero?: {
-    title: string;
-    subtitle: string;
-    image: string;
-    badge?: string;
-    imageWebp?: string;
-    imageAvif?: string;
-    video?: string;
-    imagePosition?: Position;
-    contentPosition?: Position;
-  };
-  about?: {
-    title: string;
-    text: string;
-    image: string;
-    eyebrow?: string;
-    imageWebp?: string;
-    imageAvif?: string;
-    video?: string;
-    imagePosition?: Position;
-    contentPosition?: Position;
-  };
-  services?: {
-    title: string;
-    eyebrow?: string;
-    items: Array<{ title: string; description: string }>;
-    contentPosition?: Position;
-  };
-  contact?: {
-    title: string;
-    text: string;
-    email: string;
-    buttonLabel?: string;
-    cta?: string;
-    contentPosition?: Position;
-  };
-  videoLoop?: {
-    title: string;
-    video: string;
-    videoPosition?: Position;
-    contentPosition?: Position;
-  };
-  videoPlay?: {
-    title: string;
-    video: string;
-    label?: string;
-    poster?: string;
-    videoPosition?: Position;
-    contentPosition?: Position;
-  };
   theme?: ThemeColors;
-  sectionOrder?: SectionId[];
+  sectionOrder?: string[];
+  sectionSizes?: Record<string, number>;
   [key: string]: unknown;
 }
 
-export const ALL_SECTION_IDS: SectionId[] = ["hero", "about", "services", "contact", "videoLoop", "videoPlay"];
+export const ALL_SECTION_IDS: string[] = ["hero", "about", "services", "contact", "videoLoop", "videoPlay"];
 
 export interface ContentDataMultiPage {
   pages: Record<string, ContentData>;
@@ -121,9 +72,13 @@ export function getCurrentPageContent(content: ContentFile, pageSlug: string): C
   return content.pages[pageSlug] ?? {};
 }
 
-export function getEffectiveSectionOrder(content: ContentData): SectionId[] {
-  const order = content.sectionOrder?.length ? content.sectionOrder : ALL_SECTION_IDS;
-  return order.filter((id) => content[id] != null);
+const META_KEYS = new Set(["theme", "sectionOrder", "sectionSizes", "pageOrder", "pages"]);
+
+export function getEffectiveSectionOrder(content: ContentData): string[] {
+  if (content.sectionOrder?.length) {
+    return content.sectionOrder.filter((id) => content[id] != null);
+  }
+  return Object.keys(content).filter((k) => !META_KEYS.has(k) && content[k] != null && typeof content[k] === "object" && !Array.isArray(content[k]));
 }
 
 export function mergeTheme(theme?: ThemeColors): Required<ThemeColors> {
